@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>WSL Summary Report V12</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WSL Summary">
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#6b7280;--line:#d8dee9;--primary:#2563eb;--danger:#dc2626;--ok:#16a34a;--warn:#d97706}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:3;background:#0f172a;color:white;padding:14px 16px calc(10px + env(safe-area-inset-top));box-shadow:0 2px 12px rgba(0,0,0,.15)}
+h1{font-size:18px;margin:0}.sub{font-size:12px;color:#cbd5e1;margin-top:3px}
+.tabs{display:flex;gap:8px;overflow:auto;padding:10px;background:#e8edf7;position:sticky;top:55px;z-index:2;border-bottom:2px solid #cbd5e1}.tabs::before{content:'TABS';font-size:11px;font-weight:900;color:#475569;align-self:center;margin-right:2px}.tabbtn{border:0;border-radius:999px;padding:10px 14px;background:white;color:#334155;font-weight:700;white-space:nowrap}.tabbtn.active{background:var(--primary);color:white}
+main{padding:12px 12px 90px}.tab{display:none}.tab.active{display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+h2{font-size:16px;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+label{font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px}input,select,textarea{width:100%;height:44px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:white;font-size:15px;line-height:20px;-webkit-appearance:none;appearance:none}input[type="date"]{height:44px;min-height:44px;padding:9px 11px}textarea{height:auto;min-height:70px;-webkit-appearance:none;appearance:none}
+button{cursor:pointer}.btn{border:0;border-radius:12px;padding:11px 13px;font-weight:800;background:var(--primary);color:white}.btn.secondary{background:#475569}.btn.danger{background:var(--danger)}.btn.light{background:#eef2ff;color:#1e3a8a}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pill{display:inline-flex;padding:5px 8px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:800}.muted{color:var(--muted);font-size:12px}.item{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;background:#fafafa}.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;background:white}th,td{border-bottom:1px solid var(--line);padding:9px;text-align:left;font-size:13px;white-space:nowrap}th{background:#f1f5f9;color:#334155;position:sticky;top:0}.num{text-align:right}.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.kpi{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:12px}.kpi .v{font-size:22px;font-weight:900}.kpi .t{font-size:12px;color:var(--muted)}.bad{color:var(--danger)}.good{color:var(--ok)}.warn{color:var(--warn)}.sourceBox{border:1px solid var(--line);border-radius:12px;background:white;padding:9px;max-height:160px;overflow:auto}.sourceOption{display:flex;align-items:center;gap:8px;padding:6px;border-bottom:1px solid #f1f5f9}.sourceOption:last-child{border-bottom:0}.sourceOption input{width:auto}.sourceActions{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:700px){.grid,.grid3,.kpis{grid-template-columns:1fr}.tabs{top:54px}th,td{font-size:12px}}
+</style>
+</head>
+<body>
+<header><h1>WSL Summary Report V12</h1><div class="sub">Production + Material + Machine Setup Tab + KPI + Editable Report Filters</div></header>
+<nav class="tabs">
+<button class="tabbtn active" data-tab="entry" onclick="showTab('entry')">1. New Production Record</button>
+<button class="tabbtn" data-tab="kpi" onclick="showTab('kpi')">2. Summary Filter & KPI</button>
+<button class="tabbtn" data-tab="report" onclick="showTab('report')">3. Report</button>
+<button class="tabbtn" data-tab="settings" onclick="showTab('settings')">4. Settings</button>
+</nav>
+<main>
+<section id="entry" class="tab active">
+<div class="card"><h2>Production Header</h2><div class="grid3">
+<div><label>Date</label><input id="date" type="date"></div><div><label>Shift</label><select id="shift"><option>Day</option><option>Night</option></select></div><div><label>Line</label><select id="line"><option>WL1</option><option>WL2</option></select></div>
+<div><label>FG Output KG</label><input id="fg" type="number" inputmode="decimal" placeholder="0"></div><div><label>Operators</label><input id="operators" type="number" inputmode="numeric" placeholder="0"></div><div><label>Run Hours</label><input id="hours" type="number" inputmode="decimal" placeholder="0"></div>
+</div></div>
+<div class="card"><h2>Bundle / Semi Finished Goods Loaded</h2><div class="grid3"><div><label>Type</label><select id="matType"><option>Supplier Bundle</option><option>Semi FG</option><option>Other</option></select></div><div><label>Name</label><input id="matName" placeholder="Supplier / Semi FG name"></div><div><label>KG</label><input id="matKg" type="number" inputmode="decimal" placeholder="0"></div></div><p><button class="btn light" onclick="addMaterial()">+ Add Material</button></p><div id="materialList"></div></div>
+<div class="card"><h2>Machine Reject</h2><div class="grid"><div><label>Machine</label><select id="rejMachine"></select><div class="muted" style="margin-top:6px">Machine list is controlled in Settings tab, so daily report only needs select + key in KG.</div></div><div><label>KG</label><input id="rejKg" type="number" inputmode="decimal" placeholder="0"></div></div><p><button class="btn light" onclick="addReject()">+ Add Machine Reject</button></p><div id="rejectList"></div></div>
+<div class="card"><h2>Remarks</h2><textarea id="remarks" placeholder="Any note, machine issue, material issue..."></textarea><p class="row"><button id="saveBtn" class="btn" onclick="saveRecord()">Save Production Record</button><button id="cancelEditBtn" class="btn secondary" style="display:none" onclick="cancelEdit()">Cancel Edit</button><button class="btn secondary" onclick="clearForm()">Clear Form</button></p><div id="saveMsg" class="muted"></div></div>
+</section>
+<section id="kpi" class="tab">
+<div class="card"><h2>Summary Filter</h2><div class="grid3"><div><label>From</label><input id="fFrom" type="date" onchange="renderAll()"></div><div><label>To</label><input id="fTo" type="date" onchange="renderAll()"></div><div><label>Line</label><select id="fLine" onchange="renderAll()"><option>All</option><option>WL1</option><option>WL2</option></select></div><div><label>Supplier / Material Sources</label><div id="fSourceList" class="sourceBox"></div><div class="sourceActions"><button class="btn light" onclick="selectAllSources()">All</button><button class="btn light" onclick="clearSourceSelection()">Clear</button></div></div></div><div class="muted" style="margin-top:8px">You can select multiple suppliers/material sources. Names are linked directly from what you key in under New Production Record. If one production record mixes suppliers, FG and reject are allocated by loaded KG ratio for KPI estimate.</div></div>
+<div class="card"><h2>KPI Summary</h2><div class="kpis" id="kpiCards"></div></div>
+<div class="card"><h2>Machine Reject Summary</h2><div class="tablewrap"><table id="machineSummary"></table></div></div>
+</section>
+<section id="report" class="tab">
+<div class="card"><h2>Report Filter</h2><div class="grid3">
+<div><label>From</label><input id="rFrom" type="date" onchange="renderAll()"></div>
+<div><label>To</label><input id="rTo" type="date" onchange="renderAll()"></div>
+<div><label>Line</label><select id="rLine" onchange="renderAll()"><option>All</option><option>WL1</option><option>WL2</option></select></div>
+<div><label>Shift</label><select id="rShift" onchange="renderAll()"><option>All</option><option>Day</option><option>Night</option></select></div>
+<div><label>Search Supplier / Material / Remark</label><input id="rSearch" placeholder="Type keyword..." oninput="renderAll()"></div>
+<div><label>Action</label><button class="btn light" onclick="resetReportFilter()">Reset Filter</button></div>
+</div><div class="muted" style="margin-top:8px">This filter is only for the Report tab. KPI tab keeps its own supplier/material multi-selection.</div></div>
+<div class="card"><h2>Report</h2><p class="row"><button class="btn" onclick="exportCsv()">Export CSV</button><button class="btn danger" onclick="deleteAll()">Delete All Records</button></p><div class="tablewrap"><table id="reportTable"></table></div></div>
+</section>
+<section id="settings" class="tab">
+<div class="card"><h2>Machine Name Setup</h2><div class="grid3">
+<div><label>New Machine Name</label><input id="setMachineName" type="text" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Drum / UV Sorter"></div>
+<div><label>Action</label><button class="btn light" onclick="addMachineNameFromSettings()">+ Save Machine Name</button></div>
+<div><label>Saved Machines</label><div id="settingsMachineList" class="sourceBox"></div></div>
+</div><div class="muted" style="margin-top:8px">Add/remove machine names here. The Production Record machine field will use this list. This keeps setup away from daily report entry.</div></div>
+</section>
+
+</main>
+<script>
+const KEY='wsl_summary_report_v3_records';const MACHINE_KEY='wsl_summary_report_machine_names_v1';let materials=[],rejects=[],editingId=null;let records=JSON.parse(localStorage.getItem(KEY)||'[]');let machineNames=JSON.parse(localStorage.getItem(MACHINE_KEY)||'["NIR","AI","CS","Aging","PVC Sorter","Manual Picking","Metal"]');
+function today(){return new Date().toISOString().slice(0,10)}date.value=today();fFrom.value=today();fTo.value=today();rFrom.value="";rTo.value="";
+function n(v){return Number(v||0)}function fmt(v,d=2){return isFinite(v)?Number(v).toLocaleString(undefined,{maximumFractionDigits:d}):'-'}
+function showTab(id){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.tabbtn').forEach(b=>{if(b.dataset.tab===id)b.classList.add('active')});renderAll()}
+function addMaterial(){if(!matName.value.trim()||n(matKg.value)<=0){alert('Please key in material name and KG');return}materials.push({type:matType.value,name:matName.value.trim(),kg:n(matKg.value)});matName.value='';matKg.value='';renderLists()}
+function escapeHtml(s){return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;')}
+function saveMachineNames(){machineNames=[...new Set(machineNames.map(x=>String(x).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));localStorage.setItem(MACHINE_KEY,JSON.stringify(machineNames));renderMachineNameUI()}
+function renderMachineNameUI(){
+  if(document.getElementById('rejMachine')){
+    rejMachine.innerHTML=machineNames.length?machineNames.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join(''):'<option value="">No machine saved</option>';
+  }
+  if(document.getElementById('settingsMachineList')){
+    settingsMachineList.innerHTML=machineNames.length?machineNames.map((x,i)=>`<div class="sourceOption"><b>${escapeHtml(x)}</b><span style="margin-left:auto"></span><button onclick="renameMachine(${i})">Edit</button><button onclick="removeMachineName(${i})">Delete</button></div>`).join(''):'<div class=muted>No machine name saved yet.</div>';
+  }
+}
+function addMachineNameFromSettings(){let v=setMachineName.value.trim();if(!v){alert('Please key in machine name');return}if(!machineNames.includes(v)){machineNames.push(v);saveMachineNames()}setMachineName.value=''}
+function removeMachineName(i){let name=machineNames[i];if(confirm('Delete machine name: '+name+' ?')){machineNames.splice(i,1);saveMachineNames()}}
+function renameMachine(i){let old=machineNames[i];let v=prompt('Edit machine name',old);if(v===null)return;v=v.trim();if(!v)return;machineNames[i]=v;saveMachineNames()}
+function addReject(){let machine=rejMachine.value.trim();if(!machine){alert('Please add/select machine name in Settings first');return}let kg=n(rejKg.value);if(kg<0){alert('KG cannot be negative');return}rejects.push({machine:machine,status:'Used',kg});rejKg.value='';renderLists()}
+function renderLists(){materialList.innerHTML=materials.map((m,i)=>`<div class=item><b>${m.type}</b> - ${m.name} <span class=pill>${fmt(m.kg)} KG</span> <button onclick="materials.splice(${i},1);renderLists()">Remove</button></div>`).join('')||'<div class=muted>No material added yet.</div>';rejectList.innerHTML=rejects.map((r,i)=>`<div class=item><b>${r.machine}</b> <span class=pill>${fmt(r.kg)} KG</span> <button onclick="rejects.splice(${i},1);renderLists()">Remove</button></div>`).join('')||'<div class=muted>No machine reject added yet.</div>'}
+function saveRecord(){let duplicate=records.some(r=>r.id!==editingId&&r.date===date.value&&r.shift===shift.value&&r.line===line.value);if(duplicate&&!confirm('Same Date + Shift + Line already exists. Save duplicate anyway?'))return;if(materials.length===0){alert('Please add at least one material loaded.');return}let rec={id:editingId||Date.now(),date:date.value,shift:shift.value,line:line.value,fg:n(fg.value),operators:n(operators.value),hours:n(hours.value),materials:[...materials],rejects:[...rejects],remarks:remarks.value.trim(),createdAt:new Date().toISOString()};if(editingId){records=records.map(r=>r.id===editingId?rec:r);saveMsg.textContent='Updated. Record count: '+records.length;}else{records.unshift(rec);saveMsg.textContent='Saved. Record count: '+records.length;}localStorage.setItem(KEY,JSON.stringify(records));cancelEdit(false);clearForm(false);renderAll()}
+function clearForm(clearMsg=true){fg.value='';operators.value='';hours.value='';remarks.value='';materials=[];rejects=[];renderLists();if(clearMsg)saveMsg.textContent=''}
+function editRec(id){let r=records.find(x=>x.id===id);if(!r)return;editingId=id;date.value=r.date;shift.value=r.shift;line.value=r.line;fg.value=r.fg||'';operators.value=r.operators||'';hours.value=r.hours||'';remarks.value=r.remarks||'';materials=JSON.parse(JSON.stringify(r.materials||[]));rejects=JSON.parse(JSON.stringify(r.rejects||[]));renderLists();saveBtn.textContent='Update Production Record';cancelEditBtn.style.display='inline-block';saveMsg.textContent='Editing record: '+r.date+' '+r.shift+' '+r.line;showTab('entry')}
+function cancelEdit(clearMessage=true){editingId=null;saveBtn.textContent='Save Production Record';cancelEditBtn.style.display='none';if(clearMessage)saveMsg.textContent='Edit cancelled.'}
+function getSelectedSources(){return [...document.querySelectorAll('.srcCheck:checked')].map(x=>x.value)}
+function sourceFilterLabel(){let sel=getSelectedSources();return sel.length?sel.join(' + '):'All'}
+function updateSourceOptions(){let old=getSelectedSources();let names=[...new Set(records.flatMap(r=>r.materials.map(m=>m.name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));if(!names.length){fSourceList.innerHTML='<div class=muted>No supplier/material source yet.</div>';return}fSourceList.innerHTML=names.map(x=>`<label class="sourceOption"><input class="srcCheck" type="checkbox" value="${x.replaceAll('"','&quot;')}" onchange="renderAll()" ${old.includes(x)?'checked':''}> <span>${x}</span></label>`).join('')}
+function selectAllSources(){document.querySelectorAll('.srcCheck').forEach(x=>x.checked=true);renderAll()}
+function clearSourceSelection(){document.querySelectorAll('.srcCheck').forEach(x=>x.checked=false);renderAll()}
+function baseFiltered(){return records.filter(r=>(!fFrom.value||r.date>=fFrom.value)&&(!fTo.value||r.date<=fTo.value)&&(fLine.value==='All'||r.line===fLine.value))}
+function filtered(){let srcs=getSelectedSources();return baseFiltered().filter(r=>!srcs.length||r.materials.some(m=>srcs.includes(m.name)))}
+function recordSourceRatio(r){let srcs=getSelectedSources();let total=r.materials.reduce((s,m)=>s+n(m.kg),0);if(!srcs.length)return {loaded:total,ratio:1};let selected=r.materials.filter(m=>srcs.includes(m.name)).reduce((s,m)=>s+n(m.kg),0);return {loaded:selected,ratio:total?selected/total:0}}
+function totals(rs){let loaded=0,fgkg=0,opsH=0,rej=0;rs.forEach(r=>{let sr=recordSourceRatio(r);loaded+=sr.loaded;fgkg+=n(r.fg)*sr.ratio;opsH+=n(r.operators)*n(r.hours)*sr.ratio;rej+=r.rejects.filter(x=>x.status==='Used').reduce((s,x)=>s+n(x.kg),0)*sr.ratio});return{loaded,fgkg,opsH,rej,yield:loaded?fgkg/loaded*100:null,eff:opsH?fgkg/opsH:null}}
+function renderKpi(){let rs=filtered();let t=totals(rs);let sourceNote='Filtered Source: '+sourceFilterLabel();kpiCards.innerHTML=`<div class=kpi><div class=v>${fmt(t.loaded)} KG</div><div class=t>Total Loaded</div></div><div class=kpi><div class=v>${fmt(t.fgkg)} KG</div><div class=t>FG Output</div></div><div class=kpi><div class=v>${t.yield==null?'-':fmt(t.yield)+'%'}</div><div class=t>Yield</div></div><div class=kpi><div class=v>${t.eff==null?'-':fmt(t.eff)} KG</div><div class=t>Efficiency / Person / Hour</div></div><div class=kpi><div class=v>${fmt(t.rej)} KG</div><div class=t>Machine Reject</div></div><div class=kpi><div class=v>${rs.length}</div><div class=t>Records</div></div><div class=kpi><div class=v>${sourceNote}</div><div class=t>Supplier / Source Filter</div></div>`}
+function renderMachineSummary(){let map={};filtered().forEach(r=>{let sr=recordSourceRatio(r);r.rejects.forEach(x=>{map[x.machine]??={kg:0,count:0};map[x.machine].kg+=n(x.kg)*sr.ratio;map[x.machine].count++})});let rows=Object.entries(map).map(([m,v])=>`<tr><td>${m}</td><td class=num>${fmt(v.kg)}</td><td class=num>${v.count}</td></tr>`).join('');machineSummary.innerHTML='<tr><th>Machine</th><th>KG</th><th>Records</th></tr>'+rows}
+function reportFiltered(){let q=(rSearch.value||'').trim().toLowerCase();return records.filter(r=>(!rFrom.value||r.date>=rFrom.value)&&(!rTo.value||r.date<=rTo.value)&&(rLine.value==='All'||r.line===rLine.value)&&(rShift.value==='All'||r.shift===rShift.value)&&(!q||r.materials.some(m=>(m.name+' '+m.type).toLowerCase().includes(q))||(r.remarks||'').toLowerCase().includes(q)||r.rejects.some(x=>x.machine.toLowerCase().includes(q))))}
+function resetReportFilter(){rFrom.value='';rTo.value='';rLine.value='All';rShift.value='All';rSearch.value='';renderAll()}
+function renderReport(){let srcs=[];let rows=reportFiltered().map(r=>{let sr=recordSourceRatio(r);let loaded=sr.loaded;let fgShown=n(r.fg)*sr.ratio;let y=loaded?fgShown/loaded*100:null;let e=(n(r.operators)*n(r.hours)*sr.ratio)?fgShown/(n(r.operators)*n(r.hours)*sr.ratio):null;let mats=r.materials.filter(m=>!srcs.length||srcs.includes(m.name)).map(m=>`${m.type}:${m.name} ${m.kg}kg`).join('<br>');let rejs=r.rejects.map(x=>`${x.machine}: ${!srcs.length?x.kg:fmt(n(x.kg)*sr.ratio)}kg`).join('<br>');let mixed=(srcs.length&&sr.ratio<1)?'Allocated by '+fmt(sr.ratio*100)+'% of loaded KG':'';return`<tr><td>${r.date}</td><td>${r.shift}</td><td>${r.line}</td><td class=num>${fmt(loaded)}</td><td class=num>${fmt(fgShown)}</td><td>${y==null?'-':fmt(y)+'%'}</td><td>${e==null?'-':fmt(e)}</td><td>${mats}</td><td>${rejs}</td><td>${mixed}</td><td>${r.remarks||''}</td><td><button onclick="editRec(${r.id})">Edit</button> <button onclick="delRec(${r.id})">Delete</button></td></tr>`}).join('');reportTable.innerHTML='<tr><th>Date</th><th>Shift</th><th>Line</th><th>Loaded KG</th><th>FG KG</th><th>Yield</th><th>Efficiency</th><th>Materials</th><th>Machine Reject</th><th>Supplier Filter Note</th><th>Remarks</th><th>Action</th></tr>'+rows}
+function delRec(id){if(confirm('Delete this record?')){records=records.filter(r=>r.id!==id);localStorage.setItem(KEY,JSON.stringify(records));renderAll()}}
+function deleteAll(){if(confirm('Delete ALL records?')){records=[];localStorage.setItem(KEY,'[]');renderAll()}}
+function exportCsv(){let srcs=[];let rows=[['Date','Shift','Line','LoadedKG','FGKG','Yield%','EfficiencyKGPerPersonHour','Materials','MachineRejects','Remarks']];reportFiltered().forEach(r=>{let sr=recordSourceRatio(r);let loaded=sr.loaded;let fgShown=n(r.fg)*sr.ratio;let y=loaded?fgShown/loaded*100:'';let e=(n(r.operators)*n(r.hours)*sr.ratio)?fgShown/(n(r.operators)*n(r.hours)*sr.ratio):'';rows.push([r.date,r.shift,r.line,loaded,fgShown,y,e,r.materials.map(m=>`${m.type}:${m.name}:${m.kg}`).join('|'),r.rejects.map(x=>`${x.machine}:${x.kg}`).join('|'),r.remarks])});let csv=rows.map(r=>r.map(c=>'"'+String(c).replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='wsl_summary_report.csv';a.click()}
+function renderAll(){updateSourceOptions();renderKpi();renderMachineSummary();renderReport()}renderMachineNameUI();renderLists();renderAll();if('serviceWorker'in navigator)navigator.serviceWorker.register('service-worker.js');
+</script>
+</body></html>
