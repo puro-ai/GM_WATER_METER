@@ -10,11 +10,11 @@
 :root{
   --primary:#0f766e; --primary-dark:#115e59; --bg:#f4f7f6; --card:#fff;
   --line:#d8e1df; --text:#1f2937; --muted:#6b7280; --soft:#e6f3f1;
-  --warn:#fff7ed; --bad:#fee2e2; --good:#dcfce7;
+  --bad:#fee2e2;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
-header{background:var(--primary);color:white;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+header{background:var(--primary);color:white;padding:14px 18px}
 header h1{font-size:18px;margin:0} header small{opacity:.9}
 nav{display:flex;gap:8px;padding:10px;background:var(--soft);position:sticky;top:0;z-index:5}
 button,.action{border:0;border-radius:8px;padding:10px 14px;background:white;color:var(--primary-dark);font-weight:700;cursor:pointer}
@@ -24,7 +24,7 @@ main{padding:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 label{font-size:12px;font-weight:700;color:var(--muted)}
-input,select,textarea{border:1px solid var(--line);border-radius:8px;padding:8px;min-height:36px;font-size:14px;background:white}
+input,select{border:1px solid var(--line);border-radius:8px;padding:8px;min-height:36px;font-size:14px;background:white}
 input[type="number"]{width:105px}.month-input{width:150px}
 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:72vh}
 table{border-collapse:collapse;width:100%;background:white}
@@ -47,20 +47,14 @@ canvas{width:100%;max-width:100%;height:320px;border:1px solid var(--line);borde
 .note{font-size:13px;color:var(--muted);line-height:1.5}
 .meter-item{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:8px;max-width:650px}
 .small{font-size:12px;color:var(--muted)}
-@media(max-width:760px){
-  header{align-items:flex-start;flex-direction:column}
-  nav{overflow:auto}
-  main{padding:10px}
-}
+.autosave{font-size:12px;color:var(--primary-dark);font-weight:700}
+@media(max-width:760px){header{align-items:flex-start;flex-direction:column}nav{overflow:auto}main{padding:10px}}
 </style>
 </head>
 <body>
 <header>
-  <div>
-    <h1>GM Water Meter Report App</h1>
-    <small>Auto dates by month · Day/Night shift · Before / After / Usage</small>
-  </div>
-  <button class="action" onclick="saveAll()">Save</button>
+  <h1>GM Water Meter Report App</h1>
+  <small>Auto dates by month · Day/Night shift · Auto save</small>
 </header>
 
 <nav>
@@ -77,12 +71,11 @@ canvas{width:100%;max-width:100%;height:320px;border:1px solid var(--line);borde
         <label>Recording Month</label><br>
         <input class="month-input" type="month" id="inputMonth" onchange="changeMonth(this.value)">
       </div>
-      <button class="action" onclick="saveCurrentMonth()">Save Current Month</button>
       <button class="action" onclick="exportCSV()">Export CSV</button>
+      <span class="autosave" id="saveStatus">Auto saved</span>
     </div>
     <p class="note">
-      Date and shift are auto-filled. Operator only enters <b>Before</b> and <b>After</b> meter readings.
-      Usage is calculated automatically as <b>After − Before</b>.
+      Date and shift are auto-filled. Operator enters the meter readings. Usage is calculated automatically from the reading difference.
     </p>
   </div>
 
@@ -158,104 +151,67 @@ let meters = JSON.parse(localStorage.getItem("gmwm_meters") || "null") || defaul
 let monthKey = localStorage.getItem("gmwm_current_month") || new Date().toISOString().slice(0,7);
 let records = [];
 
-function daysInMonth(ym){
-  const [y,m]=ym.split("-").map(Number);
-  return new Date(y,m,0).getDate();
-}
+function daysInMonth(ym){ const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); }
 function fmtDate(ym, day){
   const [y,m]=ym.split("-").map(Number);
-  const d = new Date(y, m-1, day);
-  return d.toLocaleDateString("en-GB", {day:"numeric", month:"short", year:"numeric"});
+  return new Date(y,m-1,day).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
 }
 function storageKey(ym){ return "gmwm_records_" + ym; }
-
-function blankRow(date, shift){
-  return {date, shift, values: meters.map(()=>({before:"", after:""}))};
-}
+function blankRow(date, shift){ return {date, shift, values: meters.map(()=>({before:"", after:""}))}; }
 function generateMonth(ym){
-  const out=[];
-  for(let d=1; d<=daysInMonth(ym); d++){
-    out.push(blankRow(fmtDate(ym,d), "Day"));
-    out.push(blankRow(fmtDate(ym,d), "Night"));
-  }
-  return out;
+  const out=[]; for(let d=1; d<=daysInMonth(ym); d++){ out.push(blankRow(fmtDate(ym,d),"Day")); out.push(blankRow(fmtDate(ym,d),"Night")); } return out;
 }
 function normalizeRecords(rows){
-  rows.forEach(r=>{
-    if(!r.values) r.values=[];
-    while(r.values.length < meters.length) r.values.push({before:"", after:""});
-    if(r.values.length > meters.length) r.values = r.values.slice(0, meters.length);
-  });
+  rows.forEach(r=>{ if(!r.values) r.values=[]; while(r.values.length<meters.length) r.values.push({before:"",after:""}); if(r.values.length>meters.length) r.values=r.values.slice(0,meters.length); });
   return rows;
 }
+function setSaveStatus(txt){
+  const el=document.getElementById("saveStatus");
+  if(el){ el.textContent=txt; setTimeout(()=>{el.textContent="Auto saved";},1200); }
+}
 function loadMonth(ym){
-  monthKey = ym;
-  localStorage.setItem("gmwm_current_month", ym);
-  const stored = localStorage.getItem(storageKey(ym));
-  records = stored ? normalizeRecords(JSON.parse(stored)) : generateMonth(ym);
-  document.getElementById("inputMonth").value = ym;
-  document.getElementById("summaryMonth").value = ym;
-  buildTable();
-  renderSummary();
+  monthKey=ym; localStorage.setItem("gmwm_current_month",ym);
+  const stored=localStorage.getItem(storageKey(ym));
+  records=stored ? normalizeRecords(JSON.parse(stored)) : generateMonth(ym);
+  document.getElementById("inputMonth").value=ym;
+  document.getElementById("summaryMonth").value=ym;
+  buildTable(); renderSummary();
 }
 function saveAll(){
   localStorage.setItem("gmwm_meters", JSON.stringify(meters));
   localStorage.setItem(storageKey(monthKey), JSON.stringify(records));
   localStorage.setItem("gmwm_current_month", monthKey);
+  setSaveStatus("Saved just now");
 }
-function saveCurrentMonth(){
-  saveAll();
-  alert(monthKey + " data saved.");
-}
-function changeMonth(ym){
-  saveAll();
-  loadMonth(ym);
-}
-function usage(v){
-  const b=parseFloat(v.before), a=parseFloat(v.after);
-  if(isNaN(b)||isNaN(a)) return "";
-  return +(a-b).toFixed(3);
-}
-function buildTable(){
-  const table=document.getElementById("recordTable");
-  table.innerHTML="";
-  const colCount = 2 + meters.length*3;
-  const title=document.createElement("tr");
-  title.className="title-row";
-  title.innerHTML=`<th colspan="${colCount}">GM WATER METER RECORD - ${monthKey}</th>`;
-  table.appendChild(title);
+function changeMonth(ym){ saveAll(); loadMonth(ym); }
+function usage(v){ const b=parseFloat(v.before), a=parseFloat(v.after); if(isNaN(b)||isNaN(a)) return ""; return +(a-b).toFixed(3); }
 
+function buildTable(){
+  const table=document.getElementById("recordTable"); table.innerHTML="";
+  const colCount=2+meters.length*3;
+  table.insertAdjacentHTML("beforeend", `<tr class="title-row"><th colspan="${colCount}">GM WATER METER RECORD - ${monthKey}</th></tr>`);
   let top=`<tr><th class="sticky datecol" rowspan="2">Date</th><th class="sticky shiftcol" rowspan="2">Shift</th>`;
   meters.forEach(m=> top += `<th colspan="3">${m}</th>`);
   top += `</tr>`;
-  let sub="<tr>";
-  meters.forEach(()=> sub += `<th>Before</th><th>After</th><th>Usage</th>`);
-  sub += "</tr>";
+  let sub="<tr>"; meters.forEach(()=> sub += `<th>Before</th><th>After</th><th>Usage</th>`); sub += "</tr>";
   table.insertAdjacentHTML("beforeend", top+sub);
-
   records.forEach((r,idx)=>{
-    let html = `<tr><td class="sticky datecol">${r.date}</td><td class="sticky shiftcol">${r.shift}</td>`;
+    let html=`<tr><td class="sticky datecol">${r.date}</td><td class="sticky shiftcol">${r.shift}</td>`;
     meters.forEach((m,i)=>{
-      const v = r.values[i] || {before:"", after:""};
-      const u = usage(v);
-      const bad = (u!=="" && u<0) ? "bad" : "";
-      html += `
-        <td><input type="number" step="0.001" value="${v.before}" oninput="updateVal(${idx},${i},'before',this.value)"></td>
-        <td><input type="number" step="0.001" value="${v.after}" oninput="updateVal(${idx},${i},'after',this.value)"></td>
-        <td class="usage ${bad}" id="u_${idx}_${i}">${u}</td>`;
+      const v=r.values[i]||{before:"",after:""}; const u=usage(v); const bad=(u!==""&&u<0)?"bad":"";
+      html += `<td><input type="number" step="0.001" value="${v.before}" oninput="updateVal(${idx},${i},'before',this.value)"></td>
+      <td><input type="number" step="0.001" value="${v.after}" oninput="updateVal(${idx},${i},'after',this.value)"></td>
+      <td class="usage ${bad}" id="u_${idx}_${i}">${u}</td>`;
     });
-    html += "</tr>";
-    table.insertAdjacentHTML("beforeend", html);
+    table.insertAdjacentHTML("beforeend", html+"</tr>");
   });
 }
-function updateVal(row, meter, field, value){
-  records[row].values[meter][field] = value;
+function updateVal(row,meter,field,value){
+  records[row].values[meter][field]=value;
   const u=usage(records[row].values[meter]);
   const cell=document.getElementById(`u_${row}_${meter}`);
-  cell.textContent=u;
-  cell.className = "usage " + (u!=="" && u<0 ? "bad" : "");
-  saveAll();
-  renderSummary();
+  cell.textContent=u; cell.className="usage "+(u!==""&&u<0?"bad":"");
+  saveAll(); renderSummary();
 }
 function calcSummary(){
   const totals=meters.map(()=>0), dayTotals=meters.map(()=>0), nightTotals=meters.map(()=>0);
@@ -264,140 +220,92 @@ function calcSummary(){
     let rowTotal=0;
     meters.forEach((m,i)=>{
       const u=usage(r.values[i]);
-      if(u!=="" && u>=0){
-        totals[i]+=u; rowTotal+=u;
-        if(r.shift==="Day") dayTotals[i]+=u;
-        if(r.shift==="Night") nightTotals[i]+=u;
-      }
+      if(u!==""&&u>=0){ totals[i]+=u; rowTotal+=u; if(r.shift==="Day") dayTotals[i]+=u; if(r.shift==="Night") nightTotals[i]+=u; }
     });
     const dayIdx=Math.floor(idx/2);
-    if(r.shift==="Day"){ dailyLabels[dayIdx]=r.date; dailyTotals[dayIdx]=0; }
+    if(r.shift==="Day"){dailyLabels[dayIdx]=r.date; dailyTotals[dayIdx]=0;}
     dailyTotals[dayIdx]=(dailyTotals[dayIdx]||0)+rowTotal;
   });
   return {totals,dayTotals,nightTotals,dailyLabels,dailyTotals};
 }
 function renderSummary(){
-  if(!document.getElementById("kpis")) return;
-  const s=calcSummary();
-  const totalAll=s.totals.reduce((a,b)=>a+b,0);
-  const highest=Math.max(...s.totals,0);
-  const highestIdx=s.totals.indexOf(highest);
-  const days=daysInMonth(monthKey);
+  const s=calcSummary(); const totalAll=s.totals.reduce((a,b)=>a+b,0);
+  const highest=Math.max(...s.totals,0), highestIdx=s.totals.indexOf(highest), days=daysInMonth(monthKey);
   document.getElementById("kpis").innerHTML=`
     <div class="kpi">Total Monthly Usage<b>${totalAll.toFixed(2)}</b></div>
     <div class="kpi">Average Per Day<b>${(totalAll/days).toFixed(2)}</b></div>
-    <div class="kpi">Highest Usage Meter<b>${meters[highestIdx] || "-"}</b><span class="small">${highest.toFixed(2)}</span></div>
+    <div class="kpi">Highest Usage Meter<b>${meters[highestIdx]||"-"}</b><span class="small">${highest.toFixed(2)}</span></div>
     <div class="kpi">Day Shift Total<b>${s.dayTotals.reduce((a,b)=>a+b,0).toFixed(2)}</b></div>
     <div class="kpi">Night Shift Total<b>${s.nightTotals.reduce((a,b)=>a+b,0).toFixed(2)}</b></div>`;
-  document.getElementById("summaryTable").innerHTML =
-    `<tr><th>Water Meter</th><th>Day Shift Usage</th><th>Night Shift Usage</th><th>Total Usage</th></tr>`+
+  document.getElementById("summaryTable").innerHTML=`<tr><th>Water Meter</th><th>Day Shift Usage</th><th>Night Shift Usage</th><th>Total Usage</th></tr>`+
     meters.map((m,i)=>`<tr><td>${m}</td><td>${s.dayTotals[i].toFixed(2)}</td><td>${s.nightTotals[i].toFixed(2)}</td><td><b>${s.totals[i].toFixed(2)}</b></td></tr>`).join("");
-  drawBar("meterChart", meters, s.totals, "Total Usage by Meter");
-  drawGrouped("shiftChart", meters, s.dayTotals, s.nightTotals);
-  drawLine("dailyChart", s.dailyLabels, s.dailyTotals, "Daily Total Usage");
+  drawBar("meterChart",meters,s.totals,"Total Usage by Meter"); drawGrouped("shiftChart",meters,s.dayTotals,s.nightTotals); drawLine("dailyChart",s.dailyLabels,s.dailyTotals,"Daily Total Usage");
 }
-function drawBar(id, labels, values, title){
-  const c=document.getElementById(id), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);
-  const max=Math.max(...values,1), left=60, top=50, bottom=300, width=c.width-left-30, group=width/Math.max(labels.length,1), barW=group*.55;
-  ctx.font="16px Arial"; ctx.fillText(title,20,26);
-  labels.forEach((lab,i)=>{
-    const x=left+i*group+group*.2, h=(values[i]/max)*(bottom-top);
-    ctx.fillRect(x,bottom-h,barW,h); ctx.font="12px Arial"; ctx.fillText(values[i].toFixed(0),x,bottom-h-6);
-    ctx.save(); ctx.translate(x+barW/2,bottom+12); ctx.rotate(-0.65); ctx.fillText(lab,0,0); ctx.restore();
-  });
-  ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(c.width-20,bottom); ctx.stroke();
+function drawBar(id,labels,values,title){
+  const c=document.getElementById(id),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);
+  const max=Math.max(...values,1),left=60,top=50,bottom=300,width=c.width-left-30,group=width/Math.max(labels.length,1),barW=group*.55;
+  ctx.font="16px Arial";ctx.fillText(title,20,26);
+  labels.forEach((lab,i)=>{const x=left+i*group+group*.2,h=(values[i]/max)*(bottom-top);ctx.fillRect(x,bottom-h,barW,h);ctx.font="12px Arial";ctx.fillText(values[i].toFixed(0),x,bottom-h-6);ctx.save();ctx.translate(x+barW/2,bottom+12);ctx.rotate(-0.65);ctx.fillText(lab,0,0);ctx.restore();});
+  ctx.beginPath();ctx.moveTo(left,bottom);ctx.lineTo(c.width-20,bottom);ctx.stroke();
 }
-function drawGrouped(id, labels, day, night){
-  const c=document.getElementById(id), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);
-  const max=Math.max(...day,...night,1), left=60, top=60, bottom=300, width=c.width-left-30, group=width/Math.max(labels.length,1);
-  ctx.font="16px Arial"; ctx.fillText("Day Shift vs Night Shift Usage",20,26);
-  ctx.font="12px Arial"; ctx.fillText("Filled bar = Day, outline bar = Night",20,44);
-  labels.forEach((lab,i)=>{
-    const x=left+i*group+group*.18, h1=(day[i]/max)*(bottom-top), h2=(night[i]/max)*(bottom-top);
-    ctx.fillRect(x,bottom-h1,group*.22,h1); ctx.strokeRect(x+group*.28,bottom-h2,group*.22,h2);
-    ctx.save(); ctx.translate(x+group*.25,bottom+12); ctx.rotate(-0.65); ctx.fillText(lab,0,0); ctx.restore();
-  });
-  ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(c.width-20,bottom); ctx.stroke();
+function drawGrouped(id,labels,day,night){
+  const c=document.getElementById(id),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);
+  const max=Math.max(...day,...night,1),left=60,top=60,bottom=300,width=c.width-left-30,group=width/Math.max(labels.length,1);
+  ctx.font="16px Arial";ctx.fillText("Day Shift vs Night Shift Usage",20,26);ctx.font="12px Arial";ctx.fillText("Filled bar = Day, outline bar = Night",20,44);
+  labels.forEach((lab,i)=>{const x=left+i*group+group*.18,h1=(day[i]/max)*(bottom-top),h2=(night[i]/max)*(bottom-top);ctx.fillRect(x,bottom-h1,group*.22,h1);ctx.strokeRect(x+group*.28,bottom-h2,group*.22,h2);ctx.save();ctx.translate(x+group*.25,bottom+12);ctx.rotate(-0.65);ctx.fillText(lab,0,0);ctx.restore();});
+  ctx.beginPath();ctx.moveTo(left,bottom);ctx.lineTo(c.width-20,bottom);ctx.stroke();
 }
-function drawLine(id, labels, values, title){
-  const c=document.getElementById(id), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);
-  const max=Math.max(...values,1), left=60, top=50, bottom=300, width=c.width-left-30;
-  ctx.font="16px Arial"; ctx.fillText(title,20,26);
-  ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(c.width-20,bottom); ctx.stroke();
-  ctx.beginPath();
-  values.forEach((v,i)=>{
-    const x=left+(i/(Math.max(values.length-1,1)))*width, y=bottom-(v/max)*(bottom-top);
-    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-  values.forEach((v,i)=>{
-    const x=left+(i/(Math.max(values.length-1,1)))*width, y=bottom-(v/max)*(bottom-top);
-    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
-    if(i%3===0){ctx.font="10px Arial"; ctx.fillText(String(i+1),x-4,bottom+14);}
-  });
+function drawLine(id,labels,values,title){
+  const c=document.getElementById(id),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);
+  const max=Math.max(...values,1),left=60,top=50,bottom=300,width=c.width-left-30;
+  ctx.font="16px Arial";ctx.fillText(title,20,26);ctx.beginPath();ctx.moveTo(left,bottom);ctx.lineTo(c.width-20,bottom);ctx.stroke();
+  ctx.beginPath();values.forEach((v,i)=>{const x=left+(i/(Math.max(values.length-1,1)))*width,y=bottom-(v/max)*(bottom-top);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
+  values.forEach((v,i)=>{const x=left+(i/(Math.max(values.length-1,1)))*width,y=bottom-(v/max)*(bottom-top);ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();if(i%3===0){ctx.font="10px Arial";ctx.fillText(String(i+1),x-4,bottom+14);}});
 }
 function showTab(name){
-  document.querySelectorAll(".tab").forEach(t=>t.classList.add("hidden"));
-  document.getElementById(name).classList.remove("hidden");
-  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
-  document.getElementById("tab"+name[0].toUpperCase()+name.slice(1)).classList.add("active");
-  if(name==="summary") renderSummary();
-  if(name==="settings") renderSettings();
+  document.querySelectorAll(".tab").forEach(t=>t.classList.add("hidden")); document.getElementById(name).classList.remove("hidden");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active")); document.getElementById("tab"+name[0].toUpperCase()+name.slice(1)).classList.add("active");
+  if(name==="summary")renderSummary(); if(name==="settings")renderSettings();
 }
 function renderSettings(){
-  const box=document.getElementById("meterSettings");
-  box.innerHTML = meters.map((m,i)=>`
-    <div class="meter-item">
-      <input value="${m}" id="meterName${i}">
-      <button class="danger" onclick="removeMeter(${i})">Remove</button>
-    </div>`).join("");
+  document.getElementById("meterSettings").innerHTML=meters.map((m,i)=>`<div class="meter-item"><input value="${m}" id="meterName${i}"><button class="danger" onclick="removeMeter(${i})">Remove</button></div>`).join("");
 }
 function saveSettings(){
-  meters = meters.map((m,i)=>document.getElementById("meterName"+i)?.value.trim() || m);
-  normalizeRecords(records);
-  saveAll();
-  buildTable(); renderSummary(); renderSettings();
-  alert("Meter settings saved.");
+  meters=meters.map((m,i)=>document.getElementById("meterName"+i)?.value.trim()||m); normalizeRecords(records); saveAll(); buildTable(); renderSummary(); renderSettings(); alert("Meter settings saved.");
 }
 function addMeter(){
-  const name=document.getElementById("newMeterName").value.trim();
-  if(!name) return alert("Please enter a meter name.");
-  meters.push(name);
-  records.forEach(r=>r.values.push({before:"", after:""}));
-  document.getElementById("newMeterName").value="";
+  const name=document.getElementById("newMeterName").value.trim(); if(!name)return alert("Please enter a meter name.");
+  meters.push(name); records.forEach(r=>r.values.push({before:"",after:""})); document.getElementById("newMeterName").value="";
   saveAll(); buildTable(); renderSummary(); renderSettings();
 }
 function removeMeter(i){
-  if(!confirm("Remove this meter? Existing data for this meter in current month will be removed.")) return;
-  meters.splice(i,1);
-  records.forEach(r=>r.values.splice(i,1));
-  saveAll(); buildTable(); renderSummary(); renderSettings();
+  if(!confirm("Remove this meter? Existing data for this meter in current month will be removed."))return;
+  meters.splice(i,1); records.forEach(r=>r.values.splice(i,1)); saveAll(); buildTable(); renderSummary(); renderSettings();
 }
-function csvEscape(v){ return `"${String(v ?? "").replaceAll('"','""')}"`; }
+function csvEscape(v){return `"${String(v??"").replaceAll('"','""')}"`;}
 function exportCSV(){
-  const header=["Date","Shift"];
-  meters.forEach(m=>header.push(`${m} Before`,`${m} After`,`${m} Usage`));
-  const lines=[header.map(csvEscape).join(",")];
-  records.forEach(r=>{
-    const row=[r.date,r.shift];
-    meters.forEach((m,i)=>{ const v=r.values[i]; row.push(v.before,v.after,usage(v)); });
-    lines.push(row.map(csvEscape).join(","));
-  });
-  downloadText(lines.join("\n"), `GM_Water_Meter_${monthKey}.csv`);
+  const lines=[];
+  lines.push(["Glowmore Water Meter Daily Recording"].map(csvEscape).join(","));
+  lines.push(["Month",monthKey].map(csvEscape).join(","));
+  lines.push(["Generated",new Date().toLocaleString()].map(csvEscape).join(","));
+  lines.push("");
+  const header=["Date","Shift"]; meters.forEach(m=>header.push(`${m} Before`,`${m} After`,`${m} Usage`));
+  lines.push(header.map(csvEscape).join(","));
+  records.forEach(r=>{const row=[r.date,r.shift]; meters.forEach((m,i)=>{const v=r.values[i];row.push(v.before,v.after,usage(v));}); lines.push(row.map(csvEscape).join(","));});
+  downloadText(lines.join("\n"),`GM_Water_Meter_Daily_Record_${monthKey}.csv`);
 }
 function exportSummaryCSV(){
-  const s=calcSummary();
-  const lines=[["Water Meter","Day Shift Usage","Night Shift Usage","Total Usage"].map(csvEscape).join(",")];
+  const s=calcSummary(), lines=[];
+  lines.push(["Glowmore Water Meter Monthly Summary"].map(csvEscape).join(","));
+  lines.push(["Month",monthKey].map(csvEscape).join(","));
+  lines.push(["Generated",new Date().toLocaleString()].map(csvEscape).join(","));
+  lines.push("");
+  lines.push(["Water Meter","Day Shift Usage","Night Shift Usage","Total Usage"].map(csvEscape).join(","));
   meters.forEach((m,i)=>lines.push([m,s.dayTotals[i].toFixed(2),s.nightTotals[i].toFixed(2),s.totals[i].toFixed(2)].map(csvEscape).join(",")));
-  downloadText(lines.join("\n"), `GM_Water_Meter_Summary_${monthKey}.csv`);
+  downloadText(lines.join("\n"),`GM_Water_Meter_Summary_${monthKey}.csv`);
 }
-function downloadText(text, filename){
-  const blob=new Blob([text],{type:"text/csv"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
-}
-document.getElementById("inputMonth").value = monthKey;
-document.getElementById("summaryMonth").value = monthKey;
-loadMonth(monthKey);
+function downloadText(text,filename){const blob=new Blob([text],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();}
+document.getElementById("inputMonth").value=monthKey; document.getElementById("summaryMonth").value=monthKey; loadMonth(monthKey);
 </script>
 </body>
 </html>
