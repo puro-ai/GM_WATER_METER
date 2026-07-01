@@ -9,7 +9,8 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelect
 document.getElementById('thisMonth').onclick=()=>{monthPicker.value=ymNow();renderAll()};
 monthPicker.onchange=renderAll;
 document.getElementById('clearMonth').onclick=()=>{if(confirm('Clear all readings for this month?')){delete state.records[monthPicker.value];save();renderAll()}};
-document.getElementById('exportCsvTop').onclick=exportCsv;
+document.getElementById('exportDailyExcel').onclick=exportDailyExcel;
+document.getElementById('exportSummaryExcel').onclick=exportSummaryExcel;
 document.getElementById('addMeter').onclick=()=>{const v=document.getElementById('newMeterName').value.trim();if(!v)return;state.meters.push(v);document.getElementById('newMeterName').value='';save();renderAll()};
 function monthRows(ym){const [y,m]=ym.split('-').map(Number);const days=new Date(y,m,0).getDate();let rows=[];for(let d=1;d<=days;d++){rows.push({day:d,shift:'Day'});rows.push({day:d,shift:'Night'});}return rows}
 function dateLabel(ym,d){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}
@@ -24,7 +25,56 @@ function renderDaily(){const ym=monthPicker.value;const table=document.getElemen
 function renderSummary(){const ym=monthPicker.value;let rows='';let grand=0;state.meters.forEach(m=>{let usages=[];monthRows(ym).forEach((r,i)=>{const u=usageFor(ym,i,m);if(u!==null&&u>=0)usages.push(u)});const total=usages.reduce((a,b)=>a+b,0);grand+=total;rows+=`<tr><td>${esc(m)}</td><td>${fmt(total)}</td><td>${fmt(usages.length?total/usages.length:null)}</td><td>${fmt(usages.length?Math.max(...usages):null)}</td><td>${fmt(usages.length?Math.min(...usages):null)}</td></tr>`});document.getElementById('summaryContent').innerHTML=`<h3>${monthPicker.value} Total Usage: ${fmt(grand)}</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>${rows}<tr><th>TOTAL</th><th>${fmt(grand)}</th><th colspan="3"></th></tr></table>`}
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
-function exportCsv(){const ym=monthPicker.value;let lines=[];lines.push('GM WATER METER REPORT');lines.push(`Month,${ym}`);lines.push('Date,Shift,'+state.meters.map(m=>`"${m} Reading"`).join(',')+',Total Usage');monthRows(ym).forEach((r,i)=>{let total=0,has=false;let vals=state.meters.map(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u}return val(ym,r.day,r.shift,m)});lines.push([dateLabel(ym,r.day),r.shift,...vals,has?total:''].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(','))});const blob=new Blob([lines.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`GM_WATER_METER_${ym}.csv`;a.click()}
+function excelSafe(x){return String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function downloadExcel(filename,html){
+  const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportDailyExcel(){
+  const ym=monthPicker.value;
+  let html=`<html><head><meta charset="utf-8"></head><body>`;
+  html+=`<h2>GM Water Meter Daily Input</h2><p>Month: ${excelSafe(ym)}</p>`;
+  html+=`<table border="1"><tr><th>Date</th><th>Shift</th>`;
+  state.meters.forEach(m=>html+=`<th>${excelSafe(m)} Reading</th><th>${excelSafe(m)} Usage</th>`);
+  html+=`<th>Total Usage</th></tr>`;
+  monthRows(ym).forEach((r,i)=>{
+    let total=0,has=false;
+    html+=`<tr><td>${excelSafe(dateLabel(ym,r.day))}</td><td>${excelSafe(r.shift)}</td>`;
+    state.meters.forEach(m=>{
+      const reading=val(ym,r.day,r.shift,m);
+      const u=usageFor(ym,i,m);
+      if(u!==null){has=true;total+=u}
+      html+=`<td>${excelSafe(reading)}</td><td>${u===null?'':excelSafe(u)}</td>`;
+    });
+    html+=`<td>${has?excelSafe(total):''}</td></tr>`;
+  });
+  html+=`</table></body></html>`;
+  downloadExcel(`GM_WATER_METER_DAILY_${ym}.xls`,html);
+}
+function exportSummaryExcel(){
+  const ym=monthPicker.value;
+  let grand=0;
+  let html=`<html><head><meta charset="utf-8"></head><body>`;
+  html+=`<h2>GM Water Meter Monthly Summary</h2><p>Month: ${excelSafe(ym)}</p>`;
+  html+=`<table border="1"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>`;
+  state.meters.forEach(m=>{
+    let usages=[];
+    monthRows(ym).forEach((r,i)=>{
+      const u=usageFor(ym,i,m);
+      if(u!==null&&u>=0)usages.push(u);
+    });
+    const total=usages.reduce((a,b)=>a+b,0);
+    grand+=total;
+    html+=`<tr><td>${excelSafe(m)}</td><td>${excelSafe(total)}</td><td>${excelSafe(usages.length?total/usages.length:'')}</td><td>${excelSafe(usages.length?Math.max(...usages):'')}</td><td>${excelSafe(usages.length?Math.min(...usages):'')}</td></tr>`;
+  });
+  html+=`<tr><th>TOTAL</th><th>${excelSafe(grand)}</th><th colspan="3"></th></tr>`;
+  html+=`</table></body></html>`;
+  downloadExcel(`GM_WATER_METER_SUMMARY_${ym}.xls`,html);
+}
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}function escAttr(s){return esc(s).replace(/"/g,'&quot;')}
 function renderAll(){renderDaily();renderSummary();renderValidation();renderSettings()}renderAll();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
