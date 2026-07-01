@@ -27,7 +27,62 @@ function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).to
 function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':String(Number(n.toFixed? n.toFixed(2): n)).replace(/\.00$/,'')}
 function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading</th>`);html+='<th>Total Usage<br>(All Meters)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const v=val(ym,r.day,r.shift,m);const cls=u!==null&&u<0?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(v)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmt(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{const d=e.target.dataset.day,s=e.target.dataset.shift,m=e.target.dataset.meter;const month=getMonth();if(!month[recKey(d,s)])month[recKey(d,s)]={};month[recKey(d,s)][m]=e.target.value.trim();save();renderAll()})}
 function summaryRows(ym){let rows=[];let grand=0;state.meters.forEach(m=>{let usages=[];monthRows(ym).forEach((r,i)=>{const u=usageFor(ym,i,m);if(u!==null&&u>=0)usages.push(u)});const total=usages.reduce((a,b)=>a+b,0);grand+=total;rows.push({meter:m,total,average:usages.length?total/usages.length:null,highest:usages.length?Math.max(...usages):null,lowest:usages.length?Math.min(...usages):null})});return {rows,grand}}
-function renderSummary(){const ym=monthPicker.value;const data=summaryRows(ym);let rows='';data.rows.forEach(r=>{rows+=`<tr><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${fmt(r.average)}</td><td>${fmt(r.highest)}</td><td>${fmt(r.lowest)}</td></tr>`});document.getElementById('summaryContent').innerHTML=`<h3>${monthPicker.value} Total Usage: ${fmt(data.grand)}</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>${rows}<tr><th>TOTAL</th><th>${fmt(data.grand)}</th><th colspan="3"></th></tr></table>`}
+function dailyTotals(ym){
+  const byDay={};
+  monthRows(ym).forEach((r,i)=>{
+    let total=0,has=false,bad=false;
+    state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}});
+    if(has && !bad){byDay[r.day]=(byDay[r.day]||0)+total}
+  });
+  return Object.keys(byDay).map(d=>({day:+d,label:dateLabel(ym,+d),total:byDay[d]})).sort((a,b)=>a.day-b.day)
+}
+function previousMonth(ym){const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-2,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function monthGrand(ym){return summaryRows(ym).grand}
+function comparisonText(ym,current){const prev=monthGrand(previousMonth(ym));if(!prev)return 'No previous month data available.';const diff=current-prev;const pct=prev?diff/prev*100:0;const arrow=diff>=0?'▲':'▼';return `${arrow} ${diff>=0?'+':''}${fmt(pct)}% Compared with Last Month`}
+function renderLineChart(points){
+  if(!points.length)return '<div class="empty-chart">No daily usage data yet.</div>';
+  const w=720,h=220,pad=34,max=Math.max(...points.map(p=>p.total),1),min=Math.min(...points.map(p=>p.total),0);
+  const range=max-min||1;
+  const xy=points.map((p,i)=>{const x=pad+(points.length===1?0:i*(w-pad*2)/(points.length-1));const y=h-pad-((p.total-min)/range)*(h-pad*2);return {x,y,...p}});
+  const path=xy.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const circles=xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>${esc(p.label)}: ${fmt(p.total)}</title></circle>`).join('');
+  return `<div class="chart-scroll"><svg class="line-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Daily usage trend"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"/><path d="${path}"/>${circles}<text x="${pad}" y="24">Max ${fmt(max)}</text><text x="${w-pad-90}" y="${h-10}">${points.length} day(s)</text></svg></div>`
+}
+function renderBars(rows){
+  const max=Math.max(...rows.map(r=>r.total),1);
+  return `<div class="bar-list">${rows.map(r=>`<div class="bar-row"><div class="bar-label">${esc(r.meter)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,r.total/max*100)}%"></div></div><div class="bar-value">${fmt(r.total)}</div></div>`).join('')}</div>`
+}
+function buildInsights(ym,data,points,ranked){
+  const insights=[];const prev=monthGrand(previousMonth(ym));
+  if(prev){const pct=(data.grand-prev)/prev*100;insights.push(`Water usage ${pct>=0?'increased':'decreased'} ${fmt(Math.abs(pct))}% compared with last month.`)}
+  else insights.push('No previous month data available for comparison yet.');
+  if(points.length){const peak=points.reduce((a,b)=>b.total>a.total?b:a,points[0]);insights.push(`Highest usage occurred on ${peak.label} with ${fmt(peak.total)} total usage.`)}
+  if(ranked.length&&data.grand>0){insights.push(`${ranked[0].meter} contributed ${fmt(ranked[0].total/data.grand*100)}% of the monthly usage.`)}
+  const issues=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null&&u<0)issues.push(1)}));
+  insights.push(issues.length?`${issues.length} abnormal negative reading issue(s) found. Please check Validation.`:'No abnormal negative reading detected.');
+  return `<ul class="insight-list">${insights.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+}
+function renderSummary(){
+  const ym=monthPicker.value;const data=summaryRows(ym);const points=dailyTotals(ym);const ranked=[...data.rows].sort((a,b)=>b.total-a.total);
+  const avgDay=points.length?data.grand/points.length:null;
+  const high=points.length?points.reduce((a,b)=>b.total>a.total?b:a,points[0]):null;
+  const low=points.length?points.reduce((a,b)=>b.total<a.total?b:a,points[0]):null;
+  const tableRows=data.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${fmt(r.average)}</td><td>${fmt(r.highest)}</td><td>${fmt(r.lowest)}</td></tr>`).join('');
+  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
+  document.getElementById('summaryContent').innerHTML=`
+    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmt(data.grand)}</div><div class="hero-sub">${esc(comparisonText(ym,data.grand))}</div></div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-title">This Month Total Usage</div><div class="kpi-value">${fmt(data.grand)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Average Daily Usage</div><div class="kpi-value">${fmt(avgDay)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Highest Usage Day</div><div class="kpi-value">${high?fmt(high.total):'-'}</div><div class="kpi-note">${high?esc(high.label):''}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Lowest Usage Day</div><div class="kpi-value">${low?fmt(low.total):'-'}</div><div class="kpi-note">${low?esc(low.label):''}</div></div>
+    </div>
+    <div class="dash-section"><h3>Daily Usage Trend</h3>${renderLineChart(points)}</div>
+    <div class="dash-section"><h3>Meter Comparison</h3>${renderBars(data.rows)}</div>
+    <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage</th><th>Share</th></tr>${rankRows}</table></div>
+    <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
+    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>${tableRows}<tr><th>TOTAL</th><th>${fmt(data.grand)}</th><th colspan="3"></th></tr></table></div>`
+}
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
 function centeredLine(text){return ['', '', '', '', text]}
