@@ -1,1 +1,4 @@
-self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());
+const CACHE='gm-water-meter-v1';
+const ASSETS=['./','index.html','style.css','app.js','storage.js','export.js','manifest.json','icons/icon-192.png','icons/icon-512.png'];
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
+self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
