@@ -1,111 +1,78 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>GM Water Meter Report V1</title>
-  <meta name="theme-color" content="#0f172a" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>GM Water Meter Report V1</title>
+<link rel="manifest" href="manifest.json">
+<style>
+:root{--grid:#b8c0cc;--head:#d9eaf7;--sub:#eef6fc;--dark:#1f2937;--blue:#2563eb;--red:#dc2626;--green:#15803d;--bg:#f3f4f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px}.top{background:#111827;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}.top h1{font-size:20px;margin:0}.top small{color:#cbd5e1}.wrap{padding:10px}.tabs{display:flex;gap:6px;margin-bottom:8px;overflow:auto}.tab{border:1px solid #9ca3af;background:#fff;padding:8px 14px;border-radius:4px;font-weight:700;color:#1f2937}.tab.active{background:#2563eb;color:#fff;border-color:#2563eb}button{border:1px solid #9ca3af;background:#fff;border-radius:4px;padding:7px 10px;font-weight:700}button.primary{background:#2563eb;color:#fff;border-color:#2563eb}button.danger{background:#fee2e2;color:#991b1b;border-color:#fecaca}button.good{background:#dcfce7;color:#166534;border-color:#bbf7d0}.sheet{background:#fff;border:1px solid var(--grid);overflow:auto}.titleRow{display:grid;grid-template-columns:1fr auto;align-items:center;background:#dbeafe;border-bottom:1px solid var(--grid);padding:10px;font-weight:800;font-size:18px}.subtitle{background:#f8fafc;border-bottom:1px solid var(--grid);padding:6px 10px;color:#475569}.grid{width:100%;border-collapse:collapse;min-width:980px}.grid th,.grid td{border:1px solid var(--grid);padding:6px;vertical-align:middle;height:36px}.grid th{background:var(--head);text-align:left;font-weight:800}.grid .section th{background:#bfdbfe;font-size:15px}.grid input,.grid select,.grid textarea{width:100%;border:0;outline:0;background:transparent;font:inherit;padding:4px}.grid input:focus,.grid select:focus,.grid textarea:focus{background:#fff7ed;box-shadow:inset 0 0 0 2px #f59e0b}.num{text-align:right}.center{text-align:center}.total{background:#fef3c7;font-weight:800}.readonly{background:#f9fafb;color:#111827}.actions{display:flex;gap:8px;justify-content:flex-end;padding:10px;background:#fff;border:1px solid var(--grid);border-top:0}.hidden{display:none}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}.card{background:#fff;border:1px solid var(--grid);padding:10px}.card b{display:block;font-size:18px;margin-top:4px}.bad{color:var(--red);font-weight:800}.ok{color:var(--green);font-weight:800}@media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.top h1{font-size:18px}.wrap{padding:8px}.grid{min-width:850px}}
+</style>
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1>GM Water Meter Report V1</h1>
-      <p>Daily Input + Summary + Validation + Settings</p>
+<div class="top"><div><h1>GM WATER METER REPORT V1</h1><small>Excel style daily water meter sheet</small></div><button class="primary" onclick="exportCSV()">Export CSV</button></div>
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('daily',this)">Daily Input</button>
+    <button class="tab" onclick="showTab('summary',this)">Summary</button>
+    <button class="tab" onclick="showTab('validation',this)">Validation</button>
+    <button class="tab" onclick="showTab('settings',this)">Settings</button>
+  </div>
+
+  <section id="daily" class="panel">
+    <div class="sheet">
+      <div class="titleRow"><span>GM WATER METER DAILY REPORT</span><span id="todayText"></span></div>
+      <div class="subtitle">Key in start / end meter reading. Usage will auto calculate. Data is saved inside this device browser.</div>
+      <table class="grid">
+        <tr class="section"><th colspan="8">DAILY HEADER</th></tr>
+        <tr><th>Date</th><td colspan="2"><input id="date" type="date"></td><th>Shift</th><td><select id="shift"><option>Day</option><option>Night</option></select></td><th>Operator</th><td colspan="2"><input id="operator" placeholder="Operator name"></td></tr>
+        <tr class="section"><th colspan="8">WATER METER READING</th></tr>
+        <tr><th style="width:45px">No</th><th>Meter Name</th><th>Start Reading</th><th>End Reading</th><th>Usage</th><th>Status</th><th>Remark</th><th>Action</th></tr>
+        <tbody id="meterBody"></tbody>
+        <tr class="total"><td colspan="4" class="num">TOTAL WATER USAGE</td><td id="totalUsage" class="num">0</td><td colspan="3"></td></tr>
+        <tr><th colspan="8">General Remarks</th></tr>
+        <tr><td colspan="8"><textarea id="remarks" rows="3" placeholder="Any abnormal usage / leak / meter issue..."></textarea></td></tr>
+      </table>
     </div>
-    <button id="exportCsvTop" class="btn primary">Export CSV</button>
-  </header>
+    <div class="actions"><button onclick="addRow()">+ Add Meter Row</button><button class="danger" onclick="clearForm()">Clear Form</button><button class="primary" onclick="saveRecord()">Save Daily Record</button></div>
+  </section>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="daily">1. Daily Input</button>
-    <button class="tab" data-tab="summary">2. Summary</button>
-    <button class="tab" data-tab="validation">3. Validation</button>
-    <button class="tab" data-tab="settings">4. Settings</button>
-  </nav>
+  <section id="summary" class="panel hidden">
+    <div class="cards"><div class="card">Records<b id="sumRecords">0</b></div><div class="card">Total Usage<b id="sumTotal">0</b></div><div class="card">Average / Day<b id="sumAvg">0</b></div><div class="card">Highest Day<b id="sumHigh">0</b></div></div>
+    <div class="sheet"><div class="titleRow"><span>SUMMARY</span><button onclick="renderSummary()">Refresh</button></div><table class="grid"><thead><tr><th>Date</th><th>Shift</th><th>Operator</th><th>Total Usage</th><th>Remarks</th><th>Action</th></tr></thead><tbody id="summaryBody"></tbody></table></div>
+  </section>
 
-  <main>
-    <section id="daily" class="panel active">
-      <div class="card">
-        <h2>Daily Header</h2>
-        <div class="grid3">
-          <label>Date <input id="date" type="date"></label>
-          <label>Shift <select id="shift"><option>Day</option><option>Night</option></select></label>
-          <label>Operator <input id="operator" placeholder="Operator name"></label>
-        </div>
-      </div>
+  <section id="validation" class="panel hidden">
+    <div class="sheet"><div class="titleRow"><span>VALIDATION CHECK</span><button onclick="renderValidation()">Refresh</button></div><table class="grid"><thead><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th><th>Status</th></tr></thead><tbody id="validationBody"></tbody></table></div>
+  </section>
 
-      <div class="card">
-        <div class="section-head">
-          <h2>Water Meter Readings</h2>
-          <button id="addMeterRow" class="btn">+ Add Meter Row</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Meter Name</th><th>Start Reading</th><th>End Reading</th><th>Usage</th><th></th></tr></thead>
-            <tbody id="meterRows"></tbody>
-          </table>
-        </div>
-        <div class="total-line">Total Water Usage: <strong id="totalUsage">0</strong></div>
-      </div>
-
-      <div class="card">
-        <h2>Remarks</h2>
-        <textarea id="remarks" rows="4" placeholder="Any abnormal usage, leak, meter issue..."></textarea>
-      </div>
-
-      <div class="actions">
-        <button id="saveRecord" class="btn primary">Save Daily Record</button>
-        <button id="clearForm" class="btn danger">Clear Form</button>
-      </div>
-    </section>
-
-    <section id="summary" class="panel">
-      <div class="card">
-        <h2>Summary Filter</h2>
-        <div class="grid3">
-          <label>From <input id="sumFrom" type="date"></label>
-          <label>To <input id="sumTo" type="date"></label>
-          <label>Shift <select id="sumShift"><option value="All">All</option><option>Day</option><option>Night</option></select></label>
-        </div>
-      </div>
-      <div class="kpis">
-        <div class="kpi"><span>Records</span><strong id="kpiRecords">0</strong></div>
-        <div class="kpi"><span>Total Usage</span><strong id="kpiTotal">0</strong></div>
-        <div class="kpi"><span>Average / Record</span><strong id="kpiAvg">0</strong></div>
-        <div class="kpi"><span>Highest Usage</span><strong id="kpiHigh">0</strong></div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>Saved Records</h2><button id="deleteAll" class="btn danger">Delete All</button></div>
-        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Shift</th><th>Operator</th><th>Total Usage</th><th>Remarks</th><th></th></tr></thead><tbody id="recordRows"></tbody></table></div>
-      </div>
-    </section>
-
-    <section id="validation" class="panel">
-      <div class="card">
-        <h2>Validation</h2>
-        <p class="muted">Checks negative usage, blank meter name, and usage higher than warning limit.</p>
-        <div id="validationList" class="validation-list"></div>
-      </div>
-    </section>
-
-    <section id="settings" class="panel">
-      <div class="card">
-        <h2>Meter Setup</h2>
-        <div class="inline-form">
-          <input id="newMeterName" placeholder="Example: Main Meter / Line 1 / Boiler" />
-          <button id="addMeterName" class="btn primary">Add Meter</button>
-        </div>
-        <div id="meterNameList" class="chips"></div>
-      </div>
-      <div class="card">
-        <h2>Warning Limit</h2>
-        <label>Usage warning limit per meter <input id="warningLimit" type="number" min="0" step="0.01"></label>
-      </div>
-    </section>
-  </main>
-
-  <script src="app.js"></script>
-</body>
-</html>
+  <section id="settings" class="panel hidden">
+    <div class="sheet"><div class="titleRow"><span>SETTINGS - WATER METER LIST</span><button class="good" onclick="addMeterSetting()">+ Add Meter</button></div><table class="grid"><thead><tr><th>No</th><th>Meter Name</th><th>Usage Limit / Day</th><th>Action</th></tr></thead><tbody id="settingsBody"></tbody></table></div>
+  </section>
+</div>
+<script>
+const KEY='gm_water_meter_v1_excel_records';const MKEY='gm_water_meter_v1_excel_meters';
+let meters=JSON.parse(localStorage.getItem(MKEY)||'null')||[{name:'Main Water Meter',limit:999999},{name:'2nd Main Water Meter',limit:999999}];
+let records=JSON.parse(localStorage.getItem(KEY)||'[]');
+function qs(id){return document.getElementById(id)}function saveMeters(){localStorage.setItem(MKEY,JSON.stringify(meters))}function saveRecords(){localStorage.setItem(KEY,JSON.stringify(records))}
+function init(){let d=new Date();qs('date').value=d.toISOString().slice(0,10);qs('todayText').textContent=d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});meters.forEach(m=>addRow(m.name));renderSettings();calcTotal();}
+function showTab(id,btn){document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));qs(id).classList.remove('hidden');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');if(id==='summary')renderSummary();if(id==='validation')renderValidation();if(id==='settings')renderSettings();}
+function meterOptions(sel=''){return meters.map(m=>`<option ${m.name===sel?'selected':''}>${m.name}</option>`).join('')}
+function addRow(sel=''){let tr=document.createElement('tr');tr.innerHTML=`<td class="center no"></td><td><select class="mname">${meterOptions(sel)}</select></td><td><input class="start num" type="number" inputmode="decimal" oninput="calcTotal()"></td><td><input class="end num" type="number" inputmode="decimal" oninput="calcTotal()"></td><td class="usage num readonly">0</td><td class="status ok">OK</td><td><input class="rmark"></td><td class="center"><button class="danger" onclick="this.closest('tr').remove();renumber();calcTotal();">Delete</button></td>`;qs('meterBody').appendChild(tr);renumber()}
+function renumber(){[...qs('meterBody').children].forEach((tr,i)=>tr.querySelector('.no').textContent=i+1)}
+function calcTotal(){let total=0;[...qs('meterBody').children].forEach(tr=>{let s=parseFloat(tr.querySelector('.start').value)||0,e=parseFloat(tr.querySelector('.end').value)||0,u=e-s;let name=tr.querySelector('.mname').value;let limit=(meters.find(m=>m.name===name)||{}).limit||999999;let st=tr.querySelector('.status');if(!tr.querySelector('.end').value&&!tr.querySelector('.start').value){u=0;st.textContent='OK';st.className='status ok'}else if(u<0){st.textContent='ERROR: Start > End';st.className='status bad'}else if(u>limit){st.textContent='HIGH USAGE';st.className='status bad';total+=u}else{st.textContent='OK';st.className='status ok';total+=u}tr.querySelector('.usage').textContent=round(u<0?0:u)});qs('totalUsage').textContent=round(total)}
+function round(n){return (Math.round(n*100)/100).toLocaleString()}
+function collectRows(){return [...qs('meterBody').children].map(tr=>({meter:tr.querySelector('.mname').value,start:+tr.querySelector('.start').value||0,end:+tr.querySelector('.end').value||0,usage:parseFloat(tr.querySelector('.usage').textContent.replace(/,/g,''))||0,status:tr.querySelector('.status').textContent,remark:tr.querySelector('.rmark').value}))}
+function saveRecord(){calcTotal();let rows=collectRows();let bad=rows.find(r=>r.status.includes('ERROR'));if(bad){alert('Cannot save: '+bad.meter+' Start > End');return}records.push({id:Date.now(),date:qs('date').value,shift:qs('shift').value,operator:qs('operator').value,total:parseFloat(qs('totalUsage').textContent.replace(/,/g,''))||0,remarks:qs('remarks').value,rows});saveRecords();alert('Saved');renderSummary()}
+function clearForm(){qs('operator').value='';qs('remarks').value='';qs('meterBody').innerHTML='';meters.forEach(m=>addRow(m.name));calcTotal()}
+function renderSummary(){let b=qs('summaryBody');b.innerHTML='';let total=0,high=0;records.forEach(r=>{total+=r.total;high=Math.max(high,r.total);let tr=document.createElement('tr');tr.innerHTML=`<td>${r.date}</td><td>${r.shift}</td><td>${r.operator||''}</td><td class="num">${round(r.total)}</td><td>${r.remarks||''}</td><td><button class="danger" onclick="delRecord(${r.id})">Delete</button></td>`;b.appendChild(tr)});qs('sumRecords').textContent=records.length;qs('sumTotal').textContent=round(total);qs('sumAvg').textContent=round(records.length?total/records.length:0);qs('sumHigh').textContent=round(high)}
+function delRecord(id){records=records.filter(r=>r.id!==id);saveRecords();renderSummary();renderValidation()}
+function renderValidation(){let b=qs('validationBody');b.innerHTML='';let count=0;records.forEach(r=>r.rows.forEach(x=>{if(x.status!=='OK'){count++;let tr=document.createElement('tr');tr.innerHTML=`<td>${r.date}</td><td>${r.shift}</td><td>${x.meter}</td><td>${x.status}</td><td class="bad">CHECK</td>`;b.appendChild(tr)}}));if(!count)b.innerHTML='<tr><td colspan="5" class="ok center">No validation issue found.</td></tr>'}
+function renderSettings(){let b=qs('settingsBody');b.innerHTML='';meters.forEach((m,i)=>{let tr=document.createElement('tr');tr.innerHTML=`<td class="center">${i+1}</td><td><input value="${m.name}" onchange="meters[${i}].name=this.value;saveMeters();refreshRows()"></td><td><input type="number" value="${m.limit}" onchange="meters[${i}].limit=+this.value||999999;saveMeters();calcTotal()"></td><td><button class="danger" onclick="meters.splice(${i},1);saveMeters();renderSettings();refreshRows();">Delete</button></td>`;b.appendChild(tr)})}
+function addMeterSetting(){meters.push({name:'New Meter',limit:999999});saveMeters();renderSettings();refreshRows()}
+function refreshRows(){[...document.querySelectorAll('.mname')].forEach(s=>{let v=s.value;s.innerHTML=meterOptions(v)});calcTotal()}
+function exportCSV(){let lines=[['GM WATER METER REPORT'],[],['Date','Shift','Operator','Meter','Start','End','Usage','Status','Row Remark','General Remarks']];records.forEach(r=>r.rows.forEach(x=>lines.push([r.date,r.shift,r.operator,x.meter,x.start,x.end,x.usage,x.status,x.remark,r.remarks])));let csv=lines.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='GM_WATER_METER_REPORT.csv';a.click()}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}init();
+</script>
+</body></html>
