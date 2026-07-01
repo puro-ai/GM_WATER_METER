@@ -6,61 +6,56 @@
   <title>GM Water Meter Report</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
-  <meta name="theme-color" content="#1f4e79" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>GM WATER METER REPORT</h1>
-      <p>Monthly water meter reading sheet</p>
+      <h1>GM Water Meter Report App</h1>
+      <p>Auto dates by month · Day/Night shift · Only key in meter reading · Usage auto-calculated</p>
     </div>
-    <button id="exportCsv" class="primary">Export CSV</button>
+    <button id="exportCsvTop" class="btn export">Export CSV</button>
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="sheet">Monthly Sheet</button>
+    <button class="tab active" data-tab="daily">Daily Input</button>
     <button class="tab" data-tab="summary">Summary</button>
     <button class="tab" data-tab="validation">Validation</button>
     <button class="tab" data-tab="settings">Settings</button>
   </nav>
 
   <main>
-    <section id="sheet" class="panel active">
-      <div class="toolbar">
-        <label>Month <input id="monthPicker" type="month"></label>
-        <button id="todayBtn">This Month</button>
-        <button id="clearMonth" class="danger">Clear Month</button>
+    <section id="daily" class="panel active">
+      <div class="controls card">
+        <div class="control-group">
+          <label>Month</label>
+          <input id="monthPicker" type="month" />
+        </div>
+        <button id="thisMonth" class="btn">This Month</button>
+        <button id="clearMonth" class="btn danger">Clear Month</button>
+        <div class="hint"><b>Only key in meter reading.</b><br>Usage is calculated automatically from previous reading.</div>
       </div>
-      <div class="note">Only key in meter reading. Usage is calculated automatically from previous reading.</div>
-      <div class="tableWrap"><table id="sheetTable"></table></div>
+      <div class="sheet-wrap card">
+        <table id="dailyTable" class="sheet"></table>
+      </div>
+      <div class="note card">Total Usage = Sum of (Current Reading − Previous Reading) for all meters. First record usage is shown as 0.</div>
     </section>
 
     <section id="summary" class="panel">
-      <div class="toolbar"><label>Month <input id="summaryMonth" type="month"></label></div>
-      <div class="tableWrap"><table id="summaryTable"></table></div>
+      <div class="card"><h2>Monthly Summary</h2><div id="summaryContent"></div></div>
     </section>
 
     <section id="validation" class="panel">
-      <div class="toolbar"><label>Month <input id="validationMonth" type="month"></label></div>
-      <div class="tableWrap"><table id="validationTable"></table></div>
+      <div class="card"><h2>Validation</h2><div id="validationContent"></div></div>
     </section>
 
     <section id="settings" class="panel">
-      <div class="settingsBox">
-        <h2>Water Meter Settings</h2>
-        <div class="addRow">
-          <input id="newMeterName" placeholder="New meter name, e.g. Main Meter" />
-          <button id="addMeter" class="primary">Add Meter</button>
-        </div>
-        <div id="meterList"></div>
-        <p class="hint">Default meters can be renamed or deleted. The monthly sheet will update automatically.</p>
+      <div class="card settings-head">
+        <h2>Meter List</h2>
+        <div><input id="newMeterName" placeholder="New meter name" /><button id="addMeter" class="btn">+ Add Meter</button></div>
       </div>
+      <div class="card"><table id="meterSettings" class="settings-table"></table></div>
     </section>
   </main>
-
-  <script src="storage.js"></script>
-  <script src="export.js"></script>
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
