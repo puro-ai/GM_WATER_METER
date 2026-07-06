@@ -10,11 +10,10 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelect
 document.getElementById('thisMonth').onclick=()=>{monthPicker.value=ymNow();renderAll()};
 monthPicker.onchange=renderAll;
 document.getElementById('clearMonth').onclick=()=>{if(confirm('Clear all readings for this month?')){delete state.records[monthPicker.value];save();renderAll()}};
+document.getElementById('importDailyCsv').onclick=()=>document.getElementById('importCsvFile').click();
+document.getElementById('importCsvFile').onchange=importDailyCsv;
 document.getElementById('exportDailyCsv').onclick=exportDailyCsv;
 document.getElementById('exportSummaryCsv').onclick=exportSummaryCsv;
-document.getElementById('exportBackupJson').onclick=exportBackupJson;
-document.getElementById('importBackupJson').onclick=()=>document.getElementById('backupFileInput').click();
-document.getElementById('backupFileInput').onchange=importBackupJson;
 document.getElementById('addMeter').onclick=()=>{const v=document.getElementById('newMeterName').value.trim();if(!v)return;state.meters.push(v);document.getElementById('newMeterName').value='';save();renderAll()};
 function monthRows(ym){const [y,m]=ym.split('-').map(Number);const days=new Date(y,m,0).getDate();let rows=[];for(let d=1;d<=days;d++){rows.push({day:d,shift:'Day'});rows.push({day:d,shift:'Night'});}return rows}
 function dateLabel(ym,d){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}
@@ -94,67 +93,93 @@ function renderSummary(){
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmt(u)} m³. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
+function centeredLine(text){return ['', '', '', '', text]}
+function csvCell(x){return `"${String(x??'').replace(/"/g,'""')}"`}
+function csvLine(items){return items.map(csvCell).join(',')}
+function downloadCsv(filename,lines){const csv='\uFEFF'+lines.join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url)},100)}
 
-function downloadJson(filename,obj){
-  const json=JSON.stringify(obj,null,2);
-  const blob=new Blob([json],{type:'application/json;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();
-  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url)},100)
-}
-function setBackupStatus(msg,isBad=false){
-  const el=document.getElementById('backupStatus');
-  if(!el)return;
-  el.textContent=msg;
-  el.className='backup-status '+(isBad?'bad-status':'ok-status');
-}
-function exportBackupJson(){
-  const payload={
-    app:'GM Water Meter Report App',
-    version:'3.3-backup-transfer',
-    exportedAt:new Date().toISOString(),
-    storageKey:LS,
-    data:state
-  };
-  downloadJson(`GM_Water_Meter_Backup_${new Date().toISOString().slice(0,10)}.json`,payload);
-  setBackupStatus('Backup exported. Save this JSON file safely in Files / iCloud / WhatsApp.');
-}
-function normalizeImportedData(obj){
-  const data=obj&&obj.data?obj.data:obj;
-  if(!data || !Array.isArray(data.meters) || typeof data.records!=='object' || data.records===null){
-    throw new Error('Invalid backup file.');
+function parseCsv(text){
+  text=String(text||'').replace(/^\uFEFF/,'');
+  const rows=[];let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i],n=text[i+1];
+    if(q){
+      if(c==='"'&&n==='"'){cell+='"';i++;}
+      else if(c==='"'){q=false;}
+      else cell+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===','){row.push(cell);cell='';}
+      else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}
+      else if(c==='\r'){}
+      else cell+=c;
+    }
   }
-  return {meters:data.meters.map(x=>String(x)).filter(Boolean),records:data.records};
+  row.push(cell);rows.push(row);
+  return rows.filter(r=>r.some(c=>String(c).trim()!==''));
 }
-function importBackupJson(e){
+function parseImportDate(x){
+  const s=String(x||'').trim();
+  let m=s.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/);
+  if(m){
+    const months={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+    const mo=months[m[2].toLowerCase()]; if(mo) return {ym:`${m[3]}-${String(mo).padStart(2,'0')}`,day:+m[1]};
+  }
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(m)return {ym:`${m[1]}-${String(+m[2]).padStart(2,'0')}`,day:+m[3]};
+  m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if(m)return {ym:`${m[3]}-${String(+m[2]).padStart(2,'0')}`,day:+m[1]};
+  const d=new Date(s);
+  if(!Number.isNaN(d.getTime()))return {ym:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,day:d.getDate()};
+  return null;
+}
+function normalizeHeader(h){return String(h||'').trim().replace(/^\uFEFF/,'')}
+function meterNameFromHeader(h){return normalizeHeader(h).replace(/\s*Reading\s*$/i,'').trim()}
+function importDailyCsv(e){
   const file=e.target.files&&e.target.files[0];
   e.target.value='';
   if(!file)return;
   const reader=new FileReader();
   reader.onload=()=>{
     try{
-      const imported=normalizeImportedData(JSON.parse(reader.result));
-      const mode=confirm('Press OK to REPLACE current data with imported backup.\nPress Cancel to MERGE imported data into current data.');
-      if(mode){
-        state=imported;
-      }else{
-        state.meters=[...new Set([...(state.meters||[]),...(imported.meters||[])])];
-        state.records={...(state.records||{}),...(imported.records||{})};
+      const rows=parseCsv(reader.result);
+      const headerIndex=rows.findIndex(r=>normalizeHeader(r[0]).toLowerCase()==='date'&&normalizeHeader(r[1]).toLowerCase()==='shift');
+      if(headerIndex<0){alert('Import failed: Cannot find CSV header row with Date and Shift.');return;}
+      const header=rows[headerIndex].map(normalizeHeader);
+      const totalIndex=header.findIndex(h=>h.toLowerCase()==='total usage');
+      const meterIndexes=[];
+      for(let i=2;i<header.length;i++){
+        if(i===totalIndex)continue;
+        const name=meterNameFromHeader(header[i]);
+        if(name)meterIndexes.push({i,name});
       }
+      if(!meterIndexes.length){alert('Import failed: No meter columns found in CSV.');return;}
+      const newRecords={};let imported=0;let firstYm=null;
+      rows.slice(headerIndex+1).forEach(r=>{
+        const parsed=parseImportDate(r[0]);
+        const shift=String(r[1]||'').trim();
+        if(!parsed||!shift)return;
+        if(!newRecords[parsed.ym])newRecords[parsed.ym]={};
+        const key=recKey(parsed.day,shift);
+        if(!newRecords[parsed.ym][key])newRecords[parsed.ym][key]={};
+        let has=false;
+        meterIndexes.forEach(({i,name})=>{
+          const v=cleanReadingInput(r[i]);
+          if(v!==''&&isValidReadingText(v)){newRecords[parsed.ym][key][name]=v;has=true;}
+        });
+        if(has){imported++; if(!firstYm)firstYm=parsed.ym;}
+      });
+      if(!imported){alert('Import failed: No valid reading rows found.');return;}
+      state.meters=meterIndexes.map(x=>x.name);
+      state.records=newRecords;
+      if(firstYm)monthPicker.value=firstYm;
       save();renderAll();
-      setBackupStatus(`Import successful. Meters: ${state.meters.length}. Months: ${Object.keys(state.records||{}).length}.`);
-    }catch(err){
-      setBackupStatus('Import failed: '+err.message,true);
-    }
+      alert(`CSV imported. ${imported} row(s) loaded. Settings meter list was updated automatically from the CSV columns.`);
+    }catch(err){alert('Import failed: '+err.message)}
   };
-  reader.onerror=()=>setBackupStatus('Import failed: cannot read file.',true);
   reader.readAsText(file);
 }
 
-function centeredLine(text){return ['', '', '', '', text]}
-function csvCell(x){return `"${String(x??'').replace(/"/g,'""')}"`}
-function csvLine(items){return items.map(csvCell).join(',')}
-function downloadCsv(filename,lines){const csv='\uFEFF'+lines.join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url)},100)}
 function exportDailyCsv(){const ym=monthPicker.value;let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER REPORT')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Date','Shift',...state.meters.map(m=>`${m} Reading`),'Total Usage']));monthRows(ym).forEach((r,i)=>{let total=0,has=false;let vals=state.meters.map(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u}return val(ym,r.day,r.shift,m)});lines.push(csvLine([dateLabel(ym,r.day),r.shift,...vals,has?csvNum(total):'']))});downloadCsv(`GM_Water_Meter_Daily_${ym}.csv`,lines)}
 function exportSummaryCsv(){const ym=monthPicker.value;const data=summaryRows(ym);let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER MONTHLY SUMMARY')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Meter Name','Total Usage','Average / Record','Highest','Lowest']));data.rows.forEach(r=>lines.push(csvLine([r.meter,csvNum(r.total),csvNum(r.average),csvNum(r.highest),csvNum(r.lowest)])));lines.push(csvLine(['TOTAL',csvNum(data.grand),'','','']));downloadCsv(`GM_Water_Meter_Summary_${ym}.csv`,lines)}
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}function escAttr(s){return esc(s).replace(/"/g,'&quot;')}
