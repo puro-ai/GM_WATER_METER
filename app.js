@@ -1,4 +1,4 @@
-const APP_VERSION='V4.1.1 Water Cost Formula';
+const APP_VERSION='V4.1.2 Cost Visibility Fixed';
 const DEFAULT_METERS=['Main Water Meter','Second Main Water Meter','Car Park Water Meter 1','Car Park Water Meter 2'];
 const LS='gm_water_meter_v1_final';
 const COMPANY_NAME='Glowmore Express Sdn Bhd';
@@ -98,7 +98,7 @@ function renderSummary(){
   const difference=incoming.grand-data.grand;
   const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
   const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
-  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${(r.meter==='Main Water Meter'||r.meter==='Second Main Water Meter')?fmtRM(waterCost(r.total)):'-'}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
+  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${isIncomingMeter(r.meter)?fmtRM(waterCost(r.total)):'-'}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
   const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
   const incomingCost=waterCost(incoming.grand), consumptionCost=waterCost(data.grand), differenceCost=waterCost(Math.max(difference,0));
   const cb=costBreakdown(incoming.grand);
