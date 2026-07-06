@@ -1,3 +1,4 @@
+const APP_VERSION='V4.1.1 Water Cost Formula';
 const DEFAULT_METERS=['Main Water Meter','Second Main Water Meter','Car Park Water Meter 1','Car Park Water Meter 2'];
 const LS='gm_water_meter_v1_final';
 const COMPANY_NAME='Glowmore Express Sdn Bhd';
@@ -102,6 +103,7 @@ function renderSummary(){
   const incomingCost=waterCost(incoming.grand), consumptionCost=waterCost(data.grand), differenceCost=waterCost(Math.max(difference,0));
   const cb=costBreakdown(incoming.grand);
   document.getElementById('summaryContent').innerHTML=`
+    <div class="note card"><b>Build:</b> ${APP_VERSION} · Water tariff formula enabled</div>
     <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmtM3(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-title">Total Incoming</div><div class="kpi-value">${fmtM3(incoming.grand)}</div></div>
