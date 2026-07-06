@@ -54,7 +54,7 @@ function previousMonth(ym){const [y,m]=ym.split('-').map(Number);const d=new Dat
 function monthGrand(ym){return summaryRows(ym).grand}
 function comparisonText(ym,current){const prev=monthGrand(previousMonth(ym));if(!prev)return 'No previous month data available.';const diff=current-prev;const pct=prev?diff/prev*100:0;const arrow=diff>=0?'▲':'▼';return `${arrow} ${diff>=0?'+':''}${fmt(pct)}% Compared with Last Month`}
 function renderLineChart(points){
-  if(!points.length)return '<div class="empty-chart">No daily usage data yet.</div>';
+  if(!points.length)return '<div class="empty-chart">No daily usage data yet. Unit: m³.</div>';
   const w=720,h=220,pad=34,max=Math.max(...points.map(p=>p.total),1),min=Math.min(...points.map(p=>p.total),0);
   const range=max-min||1;
   const xy=points.map((p,i)=>{const x=pad+(points.length===1?0:i*(w-pad*2)/(points.length-1));const y=h-pad-((p.total-min)/range)*(h-pad*2);return {x,y,...p}});
@@ -100,7 +100,7 @@ function renderSummary(){
       <div class="kpi-card"><div class="kpi-title">Average Daily Consumption</div><div class="kpi-value">${fmtM3(avgDay)}</div></div>
     </div>
     <div class="dash-section water-balance-section">
-      <h3>Water Source Balance</h3>
+      <h3>Water Source Balance (m³)</h3>
       <div class="water-balance-block">
         <div class="water-balance-title">▼ Incoming Meter</div>
         ${incomingRows}
@@ -114,11 +114,11 @@ function renderSummary(){
       </div>
       <div class="water-balance-difference"><span>Difference</span><strong>${fmtM3(difference)}</strong></div>
     </div>
-    <div class="dash-section"><h3>Daily Usage Trend</h3>${renderLineChart(points)}</div>
-    <div class="dash-section"><h3>Meter Comparison</h3>${renderBars(allData.rows)}</div>
+    <div class="dash-section"><h3>Daily Usage Trend (m³)</h3>${renderLineChart(points)}</div>
+    <div class="dash-section"><h3>Meter Comparison (m³)</h3>${renderBars(allData.rows)}</div>
     <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage (m³)</th><th>Share</th></tr>${rankRows}</table></div>
     <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
-    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th colspan="3"></th></tr></table></div>`
+    <div class="dash-section"><h3>Monthly Summary Table (m³)</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th colspan="3"></th></tr></table></div>`
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmtM3(u)}. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
