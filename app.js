@@ -70,52 +70,50 @@ function buildInsights(ym,data,points,ranked){
   insights.push(issues.length?`${issues.length} abnormal negative reading issue(s) found. Please check Validation.`:'No abnormal negative reading detected.');
   return `<ul class="insight-list">${insights.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
 }
-function isIncomingMeter(name){
+function isIncomingMeterName(name){
   const n=String(name||'').trim().toLowerCase().replace(/\s+/g,' ');
-  return n==='main water meter'||n==='second main water meter';
+  return n==='main water meter' || n==='second main water meter';
+}
+function renderMeterGroupRows(rows){
+  if(!rows.length)return '<div class="wm-empty">No meter found.</div>';
+  return rows.map(r=>`<div class="wm-row"><div class="wm-name">${esc(r.meter)}</div><div class="wm-value">${fmt(r.total)} <span>m³</span></div></div>`).join('');
 }
 function renderSummary(){
   const ym=monthPicker.value;
   const data=summaryRows(ym);
-  const incoming=data.rows.filter(r=>isIncomingMeter(r.meter));
-  const sub=data.rows.filter(r=>!isIncomingMeter(r.meter));
-  const totalIncoming=incoming.reduce((a,b)=>a+b.total,0);
-  const totalConsumption=sub.reduce((a,b)=>a+b.total,0);
+  const incomingRows=data.rows.filter(r=>isIncomingMeterName(r.meter));
+  const subRows=data.rows.filter(r=>!isIncomingMeterName(r.meter));
+  const totalIncoming=incomingRows.reduce((a,b)=>a+b.total,0);
+  const totalConsumption=subRows.reduce((a,b)=>a+b.total,0);
   const difference=totalIncoming-totalConsumption;
-  const groupRows=(rows)=>rows.length?rows.map(r=>`
-    <div class="wm-summary-row">
-      <div class="wm-meter-name">${esc(r.meter)}</div>
-      <div class="wm-meter-value">${fmt(r.total)} <span>m³</span></div>
-    </div>`).join(''):`<div class="wm-empty">No meter found.</div>`;
+
   document.getElementById('summaryContent').innerHTML=`
-    <div class="wm-summary-board">
+    <div class="wm-summary-dashboard">
       <details class="wm-group" open>
         <summary>Incoming Meter</summary>
         <div class="wm-group-body">
-          ${groupRows(incoming)}
-          <div class="wm-total-row">
-            <div>Total Incoming</div>
-            <div>${fmt(totalIncoming)} <span>m³</span></div>
-          </div>
+          ${renderMeterGroupRows(incomingRows)}
+          <div class="wm-total-row"><div>Total Incoming</div><div>${fmt(totalIncoming)} <span>m³</span></div></div>
         </div>
       </details>
+
+      <div class="wm-divider"></div>
 
       <details class="wm-group" open>
         <summary>Sub Meter</summary>
         <div class="wm-group-body">
-          ${groupRows(sub)}
-          <div class="wm-total-row">
-            <div>Total Consumption</div>
-            <div>${fmt(totalConsumption)} <span>m³</span></div>
-          </div>
+          ${renderMeterGroupRows(subRows)}
+          <div class="wm-total-row"><div>Total Consumption</div><div>${fmt(totalConsumption)} <span>m³</span></div></div>
         </div>
       </details>
+
+      <div class="wm-divider strong"></div>
 
       <div class="wm-difference-row">
         <div>Difference</div>
         <div>${fmt(difference)} <span>m³</span></div>
       </div>
-    </div>`
+    </div>`;
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmt(u)} m³. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
