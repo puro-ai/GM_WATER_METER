@@ -33,8 +33,9 @@ function meterSummaryRows(ym,filterFn){let rows=[];let grand=0;state.meters.filt
 function incomingSummaryRows(ym){return meterSummaryRows(ym,isIncomingMeter)}
 function consumptionSummaryRows(ym){return meterSummaryRows(ym,m=>!isIncomingMeter(m))}
 function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}
+function fmtM3(n){return n===null||n===undefined||Number.isNaN(n)?'-':fmt(n)+' m³'}
 function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':Number(n).toFixed(3)}
-function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading<br><span class="th-note">type as shown, e.g. 4183.888 or 334888</span></th>`);html+='<th>Total Usage<br>(All Meters)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const cls=(u!==null&&u<0)||invalid?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmt(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
+function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading (m³)<br><span class="th-note">type as shown, e.g. 4183.888 or 334888</span></th>`);html+='<th>Total Usage<br>(m³)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const cls=(u!==null&&u<0)||invalid?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmtM3(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
     const saveInput=e=>{const d=e.target.dataset.day,s=e.target.dataset.shift,m=e.target.dataset.meter;let v=cleanReadingInput(e.target.value);if(!isValidReadingText(v)){e.target.closest('td').classList.add('bad');return}const month=getMonth();if(!month[recKey(d,s)])month[recKey(d,s)]={};month[recKey(d,s)][m]=v;save();renderAll()};
     inp.onchange=saveInput;
     inp.onblur=saveInput;
@@ -58,18 +59,18 @@ function renderLineChart(points){
   const range=max-min||1;
   const xy=points.map((p,i)=>{const x=pad+(points.length===1?0:i*(w-pad*2)/(points.length-1));const y=h-pad-((p.total-min)/range)*(h-pad*2);return {x,y,...p}});
   const path=xy.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-  const circles=xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>${esc(p.label)}: ${fmt(p.total)}</title></circle>`).join('');
-  return `<div class="chart-scroll"><svg class="line-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Daily usage trend"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"/><path d="${path}"/>${circles}<text x="${pad}" y="24">Max ${fmt(max)}</text><text x="${w-pad-90}" y="${h-10}">${points.length} day(s)</text></svg></div>`
+  const circles=xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>${esc(p.label)}: ${fmtM3(p.total)}</title></circle>`).join('');
+  return `<div class="chart-scroll"><svg class="line-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Daily usage trend"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"/><path d="${path}"/>${circles}<text x="${pad}" y="24">Max ${fmtM3(max)}</text><text x="${w-pad-90}" y="${h-10}">${points.length} day(s)</text></svg></div>`
 }
 function renderBars(rows){
   const max=Math.max(...rows.map(r=>r.total),1);
-  return `<div class="bar-list">${rows.map(r=>`<div class="bar-row"><div class="bar-label">${esc(r.meter)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,r.total/max*100)}%"></div></div><div class="bar-value">${fmt(r.total)}</div></div>`).join('')}</div>`
+  return `<div class="bar-list">${rows.map(r=>`<div class="bar-row"><div class="bar-label">${esc(r.meter)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,r.total/max*100)}%"></div></div><div class="bar-value">${fmtM3(r.total)}</div></div>`).join('')}</div>`
 }
 function buildInsights(ym,data,points,ranked){
   const insights=[];const prev=monthGrand(previousMonth(ym));
   if(prev){const pct=(data.grand-prev)/prev*100;insights.push(`Water usage ${pct>=0?'increased':'decreased'} ${fmt(Math.abs(pct))}% compared with last month.`)}
   else insights.push('No previous month data available for comparison yet.');
-  if(points.length){const peak=points.reduce((a,b)=>b.total>a.total?b:a,points[0]);insights.push(`Highest usage occurred on ${peak.label} with ${fmt(peak.total)} total usage.`)}
+  if(points.length){const peak=points.reduce((a,b)=>b.total>a.total?b:a,points[0]);insights.push(`Highest usage occurred on ${peak.label} with ${fmtM3(peak.total)} total usage.`)}
   if(ranked.length&&data.grand>0){insights.push(`${ranked[0].meter} contributed ${fmt(ranked[0].total/data.grand*100)}% of the monthly usage.`)}
   const issues=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null&&u<0)issues.push(1)}));
   insights.push(issues.length?`${issues.length} abnormal negative reading issue(s) found. Please check Validation.`:'No abnormal negative reading detected.');
@@ -86,40 +87,40 @@ function renderSummary(){
   const high=points.length?points.reduce((a,b)=>b.total>a.total?b:a,points[0]):null;
   const low=points.length?points.reduce((a,b)=>b.total<a.total?b:a,points[0]):null;
   const difference=incoming.grand-data.grand;
-  const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmt(r.total)} m³</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
-  const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmt(r.total)} m³</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
-  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${fmt(r.average)}</td><td>${fmt(r.highest)}</td><td>${fmt(r.lowest)}</td></tr>`).join('');
-  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
+  const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
+  const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
+  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
+  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
   document.getElementById('summaryContent').innerHTML=`
-    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmt(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
+    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmtM3(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-title">Total Incoming</div><div class="kpi-value">${fmt(incoming.grand)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Total Consumption</div><div class="kpi-value">${fmt(data.grand)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Difference</div><div class="kpi-value">${fmt(difference)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Average Daily Consumption</div><div class="kpi-value">${fmt(avgDay)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Total Incoming</div><div class="kpi-value">${fmtM3(incoming.grand)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Total Consumption</div><div class="kpi-value">${fmtM3(data.grand)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Difference</div><div class="kpi-value">${fmtM3(difference)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Average Daily Consumption</div><div class="kpi-value">${fmtM3(avgDay)}</div></div>
     </div>
     <div class="dash-section water-balance-section">
       <h3>Water Source Balance</h3>
       <div class="water-balance-block">
         <div class="water-balance-title">▼ Incoming Meter</div>
         ${incomingRows}
-        <div class="water-balance-total"><span>Total Incoming</span><strong>${fmt(incoming.grand)} m³</strong></div>
+        <div class="water-balance-total"><span>Total Incoming</span><strong>${fmtM3(incoming.grand)}</strong></div>
       </div>
       <div class="water-balance-divider"></div>
       <div class="water-balance-block">
         <div class="water-balance-title">▼ Sub Meter</div>
         ${subRows}
-        <div class="water-balance-total"><span>Total Consumption</span><strong>${fmt(data.grand)} m³</strong></div>
+        <div class="water-balance-total"><span>Total Consumption</span><strong>${fmtM3(data.grand)}</strong></div>
       </div>
-      <div class="water-balance-difference"><span>Difference</span><strong>${fmt(difference)} m³</strong></div>
+      <div class="water-balance-difference"><span>Difference</span><strong>${fmtM3(difference)}</strong></div>
     </div>
     <div class="dash-section"><h3>Daily Usage Trend</h3>${renderLineChart(points)}</div>
     <div class="dash-section"><h3>Meter Comparison</h3>${renderBars(allData.rows)}</div>
-    <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage</th><th>Share</th></tr>${rankRows}</table></div>
+    <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage (m³)</th><th>Share</th></tr>${rankRows}</table></div>
     <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
-    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmt(data.grand)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmt(incoming.grand)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmt(difference)}</th><th colspan="3"></th></tr></table></div>`
+    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th colspan="3"></th></tr></table></div>`
 }
-function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmt(u)} m³. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
+function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmtM3(u)}. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
 function centeredLine(text){return ['', '', '', '', text]}
 function csvCell(x){return `"${String(x??'').replace(/"/g,'""')}"`}
@@ -162,7 +163,7 @@ function parseImportDate(x){
   return null;
 }
 function normalizeHeader(h){return String(h||'').trim().replace(/^\uFEFF/,'')}
-function meterNameFromHeader(h){return normalizeHeader(h).replace(/\s*Reading\s*$/i,'').trim()}
+function meterNameFromHeader(h){return normalizeHeader(h).replace(/\s*\(m³\)\s*$/i,'').replace(/\s*\(m3\)\s*$/i,'').replace(/\s*Reading\s*$/i,'').trim()}
 function importDailyCsv(e){
   const file=e.target.files&&e.target.files[0];
   e.target.value='';
@@ -208,8 +209,8 @@ function importDailyCsv(e){
   reader.readAsText(file);
 }
 
-function exportDailyCsv(){const ym=monthPicker.value;let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER REPORT')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Date','Shift',...state.meters.map(m=>`${m} Reading`),'Total Usage']));monthRows(ym).forEach((r,i)=>{let total=0,has=false;let vals=state.meters.map(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u}return val(ym,r.day,r.shift,m)});lines.push(csvLine([dateLabel(ym,r.day),r.shift,...vals,has?csvNum(total):'']))});downloadCsv(`GM_Water_Meter_Daily_${ym}.csv`,lines)}
-function exportSummaryCsv(){const ym=monthPicker.value;const data=summaryRows(ym);let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER MONTHLY SUMMARY')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Meter Name','Total Usage','Average / Record','Highest','Lowest']));data.rows.forEach(r=>lines.push(csvLine([r.meter,csvNum(r.total),csvNum(r.average),csvNum(r.highest),csvNum(r.lowest)])));lines.push(csvLine(['TOTAL',csvNum(data.grand),'','','']));downloadCsv(`GM_Water_Meter_Summary_${ym}.csv`,lines)}
+function exportDailyCsv(){const ym=monthPicker.value;let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER REPORT')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Date','Shift',...state.meters.map(m=>`${m} Reading (m³)`),'Total Usage (m³)']));monthRows(ym).forEach((r,i)=>{let total=0,has=false;let vals=state.meters.map(m=>{const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u}return val(ym,r.day,r.shift,m)});lines.push(csvLine([dateLabel(ym,r.day),r.shift,...vals,has?csvNum(total):'']))});downloadCsv(`GM_Water_Meter_Daily_${ym}.csv`,lines)}
+function exportSummaryCsv(){const ym=monthPicker.value;const data=summaryRows(ym);let lines=[];lines.push(csvLine(centeredLine(COMPANY_NAME)));lines.push('');lines.push(csvLine(centeredLine('GM WATER METER MONTHLY SUMMARY')));lines.push('');lines.push(csvLine(centeredLine(`Month : ${monthLabel(ym)}`)));lines.push(csvLine(centeredLine(`Generated : ${generatedLabel()}`)));lines.push('');lines.push(csvLine(['Meter Name','Total Usage (m³)','Average / Record (m³)','Highest (m³)','Lowest (m³)']));data.rows.forEach(r=>lines.push(csvLine([r.meter,csvNum(r.total),csvNum(r.average),csvNum(r.highest),csvNum(r.lowest)])));lines.push(csvLine(['TOTAL',csvNum(data.grand),'','','']));downloadCsv(`GM_Water_Meter_Summary_${ym}.csv`,lines)}
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}function escAttr(s){return esc(s).replace(/"/g,'&quot;')}
 function renderAll(){renderDaily();renderSummary();renderValidation();renderSettings()}renderAll();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
