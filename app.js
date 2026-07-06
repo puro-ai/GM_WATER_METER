@@ -27,8 +27,9 @@ function isValidReadingText(x){const v=cleanReadingInput(x);return v===''||/^\d+
 function num(x){const v=cleanReadingInput(x);if(v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}
 function previousReading(ym,rowIndex,meter){const rows=monthRows(ym);for(let i=rowIndex-1;i>=0;i--){const r=rows[i];const n=num(val(ym,r.day,r.shift,meter));if(n!==null)return n}return null}
 function usageFor(ym,rowIndex,meter){const r=monthRows(ym)[rowIndex];const curr=num(val(ym,r.day,r.shift,meter));const prev=previousReading(ym,rowIndex,meter);if(curr===null||prev===null)return rowIndex===0&&curr!==null?0:null;return curr-prev}
-function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:3})}
-function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':String(Number(n.toFixed? n.toFixed(3): n)).replace(/\.?0+$/,'')}
+function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}
+function fmtM3(n){return `${fmt(n)} m³`}
+function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':Number(n).toFixed(3)}
 function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading<br><span class="th-note">type as shown, e.g. 4183.888 or 334888</span></th>`);html+='<th>Total Usage<br>(All Meters)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const cls=(u!==null&&u<0)||invalid?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmt(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
     const saveInput=e=>{const d=e.target.dataset.day,s=e.target.dataset.shift,m=e.target.dataset.meter;let v=cleanReadingInput(e.target.value);if(!isValidReadingText(v)){e.target.closest('td').classList.add('bad');return}const month=getMonth();if(!month[recKey(d,s)])month[recKey(d,s)]={};month[recKey(d,s)][m]=v;save();renderAll()};
     inp.onchange=saveInput;
@@ -70,26 +71,37 @@ function buildInsights(ym,data,points,ranked){
   insights.push(issues.length?`${issues.length} abnormal negative reading issue(s) found. Please check Validation.`:'No abnormal negative reading detected.');
   return `<ul class="insight-list">${insights.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
 }
+function isIncomingMeterName(name){
+  const n=String(name||'').trim().toLowerCase().replace(/\s+/g,' ');
+  return n==='main water meter'||n==='second main water meter';
+}
+function renderMeterGroup(title,rows,total,totalLabel){
+  const body=rows.length?rows.map(r=>`<div class="wm-summary-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join(''):`<div class="wm-summary-empty">No meter found.</div>`;
+  return `<div class="wm-summary-group">
+    <div class="wm-summary-title">▼ ${esc(title)}</div>
+    <div class="wm-summary-divider"></div>
+    ${body}
+    <div class="wm-summary-divider"></div>
+    <div class="wm-summary-total"><span>${esc(totalLabel)}</span><strong>${fmtM3(total)}</strong></div>
+  </div>`;
+}
 function renderSummary(){
-  const ym=monthPicker.value;const data=summaryRows(ym);const points=dailyTotals(ym);const ranked=[...data.rows].sort((a,b)=>b.total-a.total);
-  const avgDay=points.length?data.grand/points.length:null;
-  const high=points.length?points.reduce((a,b)=>b.total>a.total?b:a,points[0]):null;
-  const low=points.length?points.reduce((a,b)=>b.total<a.total?b:a,points[0]):null;
-  const tableRows=data.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${fmt(r.average)}</td><td>${fmt(r.highest)}</td><td>${fmt(r.lowest)}</td></tr>`).join('');
-  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmt(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
+  const ym=monthPicker.value;
+  const data=summaryRows(ym);
+  const incomingRows=data.rows.filter(r=>isIncomingMeterName(r.meter));
+  const subRows=data.rows.filter(r=>!isIncomingMeterName(r.meter));
+  const totalIncoming=incomingRows.reduce((a,b)=>a+b.total,0);
+  const totalConsumption=subRows.reduce((a,b)=>a+b.total,0);
+  const difference=totalIncoming-totalConsumption;
   document.getElementById('summaryContent').innerHTML=`
-    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmt(data.grand)}</div><div class="hero-sub">${esc(comparisonText(ym,data.grand))}</div></div>
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-title">This Month Total Usage</div><div class="kpi-value">${fmt(data.grand)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Average Daily Usage</div><div class="kpi-value">${fmt(avgDay)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Highest Usage Day</div><div class="kpi-value">${high?fmt(high.total):'-'}</div><div class="kpi-note">${high?esc(high.label):''}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Lowest Usage Day</div><div class="kpi-value">${low?fmt(low.total):'-'}</div><div class="kpi-note">${low?esc(low.label):''}</div></div>
-    </div>
-    <div class="dash-section"><h3>Daily Usage Trend</h3>${renderLineChart(points)}</div>
-    <div class="dash-section"><h3>Meter Comparison</h3>${renderBars(data.rows)}</div>
-    <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage</th><th>Share</th></tr>${rankRows}</table></div>
-    <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
-    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage</th><th>Average / Record</th><th>Highest</th><th>Lowest</th></tr>${tableRows}<tr><th>TOTAL</th><th>${fmt(data.grand)}</th><th colspan="3"></th></tr></table></div>`
+    <div class="wm-summary-card">
+      ${renderMeterGroup('Incoming Meter',incomingRows,totalIncoming,'Total Incoming')}
+      ${renderMeterGroup('Sub Meter',subRows,totalConsumption,'Total Consumption')}
+      <div class="wm-summary-final">
+        <span>Difference</span>
+        <strong>${fmtM3(difference)}</strong>
+      </div>
+    </div>`;
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmt(u)} m³. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
