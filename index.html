@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <h1>GM Water Meter Report App</h1>
-      <p>Auto dates by month · Day/Night shift · Only key in meter reading · Usage auto-calculated</p>
+      <p>Auto dates by month · Day/Night shift · Only key in meter reading · Decimal reading supported · Usage auto-calculated</p>
     </div>
   </header>
 
@@ -32,12 +32,12 @@
         <button id="thisMonth" class="btn">This Month</button>
         <button id="clearMonth" class="btn danger">Clear Month</button>
         <button id="exportDailyCsv" class="btn export in-panel">Export CSV</button>
-        <div class="hint"><b>Only key in meter reading.</b><br>Usage is calculated automatically from previous reading.</div>
+        <div class="hint"><b>Only key in meter reading.</b><br>Enter exactly what you see. Example: <b>4183.888</b> or <b>334888</b>. Decimal part is treated as m³ decimal, not as extra cubic meter.</div>
       </div>
       <div class="sheet-wrap card">
         <table id="dailyTable" class="sheet"></table>
       </div>
-      <div class="note card">Total Usage = Sum of (Current Reading − Previous Reading) for all meters. First record usage is shown as 0.</div>
+      <div class="note card">Total Usage = Sum of (Current Reading − Previous Reading). Example: 4183.888 − 4183.500 = 0.388 m³, not 388 m³. First record usage is shown as 0.</div>
     </section>
 
     <section id="summary" class="panel">
