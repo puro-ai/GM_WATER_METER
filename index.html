@@ -55,6 +55,14 @@
     </section>
 
     <section id="settings" class="panel">
+      <div class="card">
+        <h2>Water Tariff</h2>
+        <div class="tariff-settings">
+          <label>First 35 m³ price<br><input id="tariffFirstRate" type="number" step="0.01" min="0" /></label>
+          <label>After 35 m³ price<br><input id="tariffSecondRate" type="number" step="0.01" min="0" /></label>
+        </div>
+        <div class="note" style="margin-top:12px">Formula uses first 35.000 m³ at the first price, then balance m³ at the second price.</div>
+      </div>
       <div class="card settings-head">
         <h2>Meter List</h2>
         <div><input id="newMeterName" placeholder="New meter name" /><button id="addMeter" class="btn">+ Add Meter</button></div>

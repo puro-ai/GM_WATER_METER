@@ -2,7 +2,9 @@ const DEFAULT_METERS=['Main Water Meter','Second Main Water Meter','Car Park Wat
 const LS='gm_water_meter_v1_final';
 const COMPANY_NAME='Glowmore Express Sdn Bhd';
 let state=load();
-function load(){try{return JSON.parse(localStorage.getItem(LS))||{meters:DEFAULT_METERS,records:{}}}catch(e){return{meters:DEFAULT_METERS,records:{}}}}
+function defaultTariff(){return {firstRate:3.51,secondRate:3.83,threshold:35}}
+function normalizeState(st){st=st||{};if(!Array.isArray(st.meters))st.meters=DEFAULT_METERS;if(!st.records)st.records={};if(!st.tariff)st.tariff=defaultTariff();if(!Number.isFinite(Number(st.tariff.firstRate)))st.tariff.firstRate=3.51;if(!Number.isFinite(Number(st.tariff.secondRate)))st.tariff.secondRate=3.83;if(!Number.isFinite(Number(st.tariff.threshold)))st.tariff.threshold=35;return st}
+function load(){try{return normalizeState(JSON.parse(localStorage.getItem(LS))||{})}catch(e){return normalizeState({})}}
 function save(){localStorage.setItem(LS,JSON.stringify(state))}
 function ymNow(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 const monthPicker=document.getElementById('monthPicker');monthPicker.value=ymNow();
@@ -15,6 +17,8 @@ document.getElementById('importCsvFile').onchange=importDailyCsv;
 document.getElementById('exportDailyCsv').onclick=exportDailyCsv;
 document.getElementById('exportSummaryCsv').onclick=exportSummaryCsv;
 document.getElementById('addMeter').onclick=()=>{const v=document.getElementById('newMeterName').value.trim();if(!v)return;state.meters.push(v);document.getElementById('newMeterName').value='';save();renderAll()};
+function bindTariffInputs(){['tariffFirstRate','tariffSecondRate'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.onchange=()=>{const v=Number(el.value);if(!Number.isFinite(v)||v<0){alert('Please enter a valid RM per m³ price.');renderSettings();return}if(!state.tariff)state.tariff=defaultTariff();if(id==='tariffFirstRate')state.tariff.firstRate=v;else state.tariff.secondRate=v;save();renderAll()}})}
+bindTariffInputs();
 function monthRows(ym){const [y,m]=ym.split('-').map(Number);const days=new Date(y,m,0).getDate();let rows=[];for(let d=1;d<=days;d++){rows.push({day:d,shift:'Day'});rows.push({day:d,shift:'Night'});}return rows}
 function dateLabel(ym,d){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}
 function monthLabel(ym){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}
@@ -34,6 +38,10 @@ function incomingSummaryRows(ym){return meterSummaryRows(ym,isIncomingMeter)}
 function consumptionSummaryRows(ym){return meterSummaryRows(ym,m=>!isIncomingMeter(m))}
 function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}
 function fmtM3(n){return n===null||n===undefined||Number.isNaN(n)?'-':fmt(n)+' m³'}
+function fmtRM(n){return n===null||n===undefined||Number.isNaN(n)?'-':'RM '+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function tariff(){return state.tariff||defaultTariff()}
+function waterCost(m3){m3=Number(m3)||0;const t=tariff();const th=Number(t.threshold)||35;const r1=Number(t.firstRate)||0;const r2=Number(t.secondRate)||0;if(m3<=th)return m3*r1;return th*r1+(m3-th)*r2}
+function costBreakdown(m3){m3=Number(m3)||0;const t=tariff();const th=Number(t.threshold)||35;const first=Math.min(Math.max(m3,0),th);const balance=Math.max(m3-th,0);return {first,balance,firstCost:first*(Number(t.firstRate)||0),balanceCost:balance*(Number(t.secondRate)||0),total:waterCost(m3)}}
 function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':Number(n).toFixed(3)}
 function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading (m³)<br><span class="th-note">type as shown, e.g. 4183.888 or 334888</span></th>`);html+='<th>Total Usage<br>(m³)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const cls=(u!==null&&u<0)||invalid?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmtM3(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
     const saveInput=e=>{const d=e.target.dataset.day,s=e.target.dataset.shift,m=e.target.dataset.meter;let v=cleanReadingInput(e.target.value);if(!isValidReadingText(v)){e.target.closest('td').classList.add('bad');return}const month=getMonth();if(!month[recKey(d,s)])month[recKey(d,s)]={};month[recKey(d,s)][m]=v;save();renderAll()};
@@ -89,8 +97,10 @@ function renderSummary(){
   const difference=incoming.grand-data.grand;
   const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
   const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
-  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
+  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${fmtRM(waterCost(r.total))}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
   const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
+  const incomingCost=waterCost(incoming.grand), consumptionCost=waterCost(data.grand), differenceCost=waterCost(Math.max(difference,0));
+  const cb=costBreakdown(incoming.grand);
   document.getElementById('summaryContent').innerHTML=`
     <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmtM3(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
     <div class="kpi-grid">
@@ -114,14 +124,39 @@ function renderSummary(){
       </div>
       <div class="water-balance-difference"><span>Difference</span><strong>${fmtM3(difference)}</strong></div>
     </div>
+    <div class="dash-section tariff-section"><h3>Water Tariff Formula</h3>
+      <div class="formula-box">
+        <div><b>Formula:</b> If Total Incoming ≤ ${fmtM3(tariff().threshold)}, Cost = Total Incoming × RM ${Number(tariff().firstRate).toFixed(2)}</div>
+        <div>If Total Incoming > ${fmtM3(tariff().threshold)}, Cost = (${fmtM3(tariff().threshold)} × RM ${Number(tariff().firstRate).toFixed(2)}) + ((Total Incoming − ${fmtM3(tariff().threshold)}) × RM ${Number(tariff().secondRate).toFixed(2)})</div>
+      </div>
+      <table class="summary-table"><tr><th>Item</th><th>Volume</th><th>Rate</th><th>Estimated Cost</th></tr>
+        <tr><td>First Block</td><td>${fmtM3(cb.first)}</td><td>RM ${Number(tariff().firstRate).toFixed(2)} / m³</td><td>${fmtRM(cb.firstCost)}</td></tr>
+        <tr><td>Balance Block</td><td>${fmtM3(cb.balance)}</td><td>RM ${Number(tariff().secondRate).toFixed(2)} / m³</td><td>${fmtRM(cb.balanceCost)}</td></tr>
+        <tr><th>Total Incoming Cost</th><th>${fmtM3(incoming.grand)}</th><th></th><th>${fmtRM(incomingCost)}</th></tr>
+      </table>
+    </div>
     <div class="dash-section"><h3>Daily Usage Trend (m³)</h3>${renderLineChart(points)}</div>
     <div class="dash-section"><h3>Meter Comparison (m³)</h3>${renderBars(allData.rows)}</div>
     <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage (m³)</th><th>Share</th></tr>${rankRows}</table></div>
     <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
-    <div class="dash-section"><h3>Monthly Summary Table (m³)</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th colspan="3"></th></tr></table></div>`
+    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Estimated Cost (RM)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th>${fmtRM(consumptionCost)}</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th>${fmtRM(incomingCost)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th>${fmtRM(differenceCost)}</th><th colspan="3"></th></tr></table></div>`
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmtM3(u)}. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
-function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
+function renderSettings(){
+  const tarr=tariff();
+  const firstInput=document.getElementById('tariffFirstRate');
+  const secondInput=document.getElementById('tariffSecondRate');
+  if(firstInput&&!firstInput.matches(':focus'))firstInput.value=Number(tarr.firstRate).toFixed(2);
+  if(secondInput&&!secondInput.matches(':focus'))secondInput.value=Number(tarr.secondRate).toFixed(2);
+  let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';
+  state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);
+  const t=document.getElementById('meterSettings');
+  t.innerHTML=html;
+  t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});
+  t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});
+  t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});
+  t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}});
+}
 function centeredLine(text){return ['', '', '', '', text]}
 function csvCell(x){return `"${String(x??'').replace(/"/g,'""')}"`}
 function csvLine(items){return items.map(csvCell).join(',')}

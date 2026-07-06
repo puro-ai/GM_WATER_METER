@@ -14,3 +14,4 @@
 .water-balance-divider{height:2px;background:linear-gradient(90deg,#006b5d,transparent);margin:14px 0}
 .water-balance-difference{margin-top:16px;border:2px solid #006b5d;border-radius:10px;background:#fff;font-size:20px;padding:14px 16px}
 .water-balance-empty{padding:10px 12px;color:#5b6770;font-weight:800;background:#f8fffd;border:1px dashed #cce5dc;border-radius:8px}
+.tariff-settings{display:flex;gap:16px;flex-wrap:wrap}.tariff-settings label{font-weight:800;color:#064e3b}.tariff-settings input{margin-top:6px;min-width:190px}.formula-box{background:#f8fffd;border:1px solid #cce5dc;border-radius:8px;padding:12px;margin-bottom:12px;line-height:1.6}.summary-table td:nth-child(2),.summary-table td:nth-child(3),.summary-table td:nth-child(4),.summary-table td:nth-child(5),.summary-table td:nth-child(6){font-variant-numeric:tabular-nums}.tariff-section{border-left:5px solid #0b8375}
