@@ -12,6 +12,9 @@ monthPicker.onchange=renderAll;
 document.getElementById('clearMonth').onclick=()=>{if(confirm('Clear all readings for this month?')){delete state.records[monthPicker.value];save();renderAll()}};
 document.getElementById('exportDailyCsv').onclick=exportDailyCsv;
 document.getElementById('exportSummaryCsv').onclick=exportSummaryCsv;
+document.getElementById('exportBackupJson').onclick=exportBackupJson;
+document.getElementById('importBackupJson').onclick=()=>document.getElementById('backupFileInput').click();
+document.getElementById('backupFileInput').onchange=importBackupJson;
 document.getElementById('addMeter').onclick=()=>{const v=document.getElementById('newMeterName').value.trim();if(!v)return;state.meters.push(v);document.getElementById('newMeterName').value='';save();renderAll()};
 function monthRows(ym){const [y,m]=ym.split('-').map(Number);const days=new Date(y,m,0).getDate();let rows=[];for(let d=1;d<=days;d++){rows.push({day:d,shift:'Day'});rows.push({day:d,shift:'Night'});}return rows}
 function dateLabel(ym,d){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}
@@ -91,6 +94,63 @@ function renderSummary(){
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmt(u)} m³. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);const t=document.getElementById('meterSettings');t.innerHTML=html;t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}})}
+
+function downloadJson(filename,obj){
+  const json=JSON.stringify(obj,null,2);
+  const blob=new Blob([json],{type:'application/json;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url)},100)
+}
+function setBackupStatus(msg,isBad=false){
+  const el=document.getElementById('backupStatus');
+  if(!el)return;
+  el.textContent=msg;
+  el.className='backup-status '+(isBad?'bad-status':'ok-status');
+}
+function exportBackupJson(){
+  const payload={
+    app:'GM Water Meter Report App',
+    version:'3.3-backup-transfer',
+    exportedAt:new Date().toISOString(),
+    storageKey:LS,
+    data:state
+  };
+  downloadJson(`GM_Water_Meter_Backup_${new Date().toISOString().slice(0,10)}.json`,payload);
+  setBackupStatus('Backup exported. Save this JSON file safely in Files / iCloud / WhatsApp.');
+}
+function normalizeImportedData(obj){
+  const data=obj&&obj.data?obj.data:obj;
+  if(!data || !Array.isArray(data.meters) || typeof data.records!=='object' || data.records===null){
+    throw new Error('Invalid backup file.');
+  }
+  return {meters:data.meters.map(x=>String(x)).filter(Boolean),records:data.records};
+}
+function importBackupJson(e){
+  const file=e.target.files&&e.target.files[0];
+  e.target.value='';
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const imported=normalizeImportedData(JSON.parse(reader.result));
+      const mode=confirm('Press OK to REPLACE current data with imported backup.\nPress Cancel to MERGE imported data into current data.');
+      if(mode){
+        state=imported;
+      }else{
+        state.meters=[...new Set([...(state.meters||[]),...(imported.meters||[])])];
+        state.records={...(state.records||{}),...(imported.records||{})};
+      }
+      save();renderAll();
+      setBackupStatus(`Import successful. Meters: ${state.meters.length}. Months: ${Object.keys(state.records||{}).length}.`);
+    }catch(err){
+      setBackupStatus('Import failed: '+err.message,true);
+    }
+  };
+  reader.onerror=()=>setBackupStatus('Import failed: cannot read file.',true);
+  reader.readAsText(file);
+}
+
 function centeredLine(text){return ['', '', '', '', text]}
 function csvCell(x){return `"${String(x??'').replace(/"/g,'""')}"`}
 function csvLine(items){return items.map(csvCell).join(',')}

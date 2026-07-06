@@ -58,6 +58,16 @@
         <div><input id="newMeterName" placeholder="New meter name" /><button id="addMeter" class="btn">+ Add Meter</button></div>
       </div>
       <div class="card"><table id="meterSettings" class="settings-table"></table></div>
+      <div class="card backup-card">
+        <h2>Data Backup / Transfer</h2>
+        <p class="backup-note">Use this when moving data from old Home Screen app to new app. Export backup from old app, then import here.</p>
+        <div class="backup-actions">
+          <button id="exportBackupJson" class="btn">Export Backup JSON</button>
+          <button id="importBackupJson" class="btn">Import Backup JSON</button>
+          <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
+        </div>
+        <div id="backupStatus" class="backup-status"></div>
+      </div>
     </section>
   </main>
 <script src="app.js"></script>
