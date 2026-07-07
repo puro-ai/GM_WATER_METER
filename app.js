@@ -1,10 +1,10 @@
-const APP_VERSION='V4.1.2 Cost Visibility Fixed';
+const APP_VERSION='V4.2 Daily Usage Target';
 const DEFAULT_METERS=['Main Water Meter','Second Main Water Meter','Car Park Water Meter 1','Car Park Water Meter 2'];
 const LS='gm_water_meter_v1_final';
 const COMPANY_NAME='Glowmore Express Sdn Bhd';
 let state=load();
 function defaultTariff(){return {firstRate:3.51,secondRate:3.83,threshold:35}}
-function normalizeState(st){st=st||{};if(!Array.isArray(st.meters))st.meters=DEFAULT_METERS;if(!st.records)st.records={};if(!st.tariff)st.tariff=defaultTariff();if(!Number.isFinite(Number(st.tariff.firstRate)))st.tariff.firstRate=3.51;if(!Number.isFinite(Number(st.tariff.secondRate)))st.tariff.secondRate=3.83;if(!Number.isFinite(Number(st.tariff.threshold)))st.tariff.threshold=35;return st}
+function normalizeState(st){st=st||{};if(!Array.isArray(st.meters))st.meters=DEFAULT_METERS;if(!st.records)st.records={};if(!st.tariff)st.tariff=defaultTariff();if(!st.targets||typeof st.targets!=='object'||Array.isArray(st.targets))st.targets={};if(!Number.isFinite(Number(st.tariff.firstRate)))st.tariff.firstRate=3.51;if(!Number.isFinite(Number(st.tariff.secondRate)))st.tariff.secondRate=3.83;if(!Number.isFinite(Number(st.tariff.threshold)))st.tariff.threshold=35;return st}
 function load(){try{return normalizeState(JSON.parse(localStorage.getItem(LS))||{})}catch(e){return normalizeState({})}}
 function save(){localStorage.setItem(LS,JSON.stringify(state))}
 function ymNow(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
@@ -32,6 +32,7 @@ function isValidReadingText(x){const v=cleanReadingInput(x);return v===''||/^\d+
 function num(x){const v=cleanReadingInput(x);if(v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}
 function previousReading(ym,rowIndex,meter){const rows=monthRows(ym);for(let i=rowIndex-1;i>=0;i--){const r=rows[i];const n=num(val(ym,r.day,r.shift,meter));if(n!==null)return n}return null}
 function usageFor(ym,rowIndex,meter){const r=monthRows(ym)[rowIndex];const curr=num(val(ym,r.day,r.shift,meter));const prev=previousReading(ym,rowIndex,meter);if(curr===null||prev===null)return rowIndex===0&&curr!==null?0:null;return curr-prev}
+function targetFor(meter){const v=state.targets&&state.targets[meter];const n=Number(v);return Number.isFinite(n)&&n>0?n:null}
 function normMeterName(m){return String(m||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
 function isIncomingMeter(m){const n=normMeterName(m);return n==='mainwatermeter'||n==='secondmainwatermeter'||n==='secondmainwater'}
 function meterSummaryRows(ym,filterFn){let rows=[];let grand=0;state.meters.filter(filterFn||(()=>true)).forEach(m=>{let usages=[];monthRows(ym).forEach((r,i)=>{const u=usageFor(ym,i,m);if(u!==null&&u>=0)usages.push(u)});const total=usages.reduce((a,b)=>a+b,0);grand+=total;rows.push({meter:m,total,average:usages.length?total/usages.length:null,highest:usages.length?Math.max(...usages):null,lowest:usages.length?Math.min(...usages):null})});return {rows,grand}}
@@ -39,12 +40,14 @@ function incomingSummaryRows(ym){return meterSummaryRows(ym,isIncomingMeter)}
 function consumptionSummaryRows(ym){return meterSummaryRows(ym,m=>!isIncomingMeter(m))}
 function fmt(n){return n===null||n===undefined||Number.isNaN(n)?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}
 function fmtM3(n){return n===null||n===undefined||Number.isNaN(n)?'-':fmt(n)+' m³'}
+function fmt0(n){return n===null||n===undefined||Number.isNaN(n)?'-':Math.round(Number(n)).toLocaleString('en-US')}
+function fmtM3Summary(n){return n===null||n===undefined||Number.isNaN(n)?'-':fmt0(n)+' m³'}
 function fmtRM(n){return n===null||n===undefined||Number.isNaN(n)?'-':'RM '+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function tariff(){return state.tariff||defaultTariff()}
 function waterCost(m3){m3=Number(m3)||0;const t=tariff();const th=Number(t.threshold)||35;const r1=Number(t.firstRate)||0;const r2=Number(t.secondRate)||0;if(m3<=th)return m3*r1;return th*r1+(m3-th)*r2}
 function costBreakdown(m3){m3=Number(m3)||0;const t=tariff();const th=Number(t.threshold)||35;const first=Math.min(Math.max(m3,0),th);const balance=Math.max(m3-th,0);return {first,balance,firstCost:first*(Number(t.firstRate)||0),balanceCost:balance*(Number(t.secondRate)||0),total:waterCost(m3)}}
 function csvNum(n){return n===null||n===undefined||Number.isNaN(n)?'':Number(n).toFixed(3)}
-function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th>Date</th><th>Shift</th>';state.meters.forEach(m=>html+=`<th>${esc(m)}<br>Reading (m³)<br><span class="th-note">type as shown, e.g. 4183.888 or 334888</span></th>`);html+='<th>Total Usage<br>(m³)</th></tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const cls=(u!==null&&u<0)||invalid?'bad':'';cells+=`<td class="${cls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmtM3(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
+function renderDaily(){const ym=monthPicker.value;const table=document.getElementById('dailyTable');const rows=monthRows(ym);let html='<thead><tr><th rowspan="2">Date</th><th rowspan="2">Shift</th>';state.meters.forEach(m=>html+=`<th colspan="2" class="meter-group-head">${esc(m)}<br><span class="th-note">m³</span></th>`);html+='<th rowspan="2">Total Usage<br>(m³)</th></tr><tr>';state.meters.forEach(()=>html+='<th class="sub-head">Reading</th><th class="sub-head day-head">Day</th>');html+='</tr></thead><tbody>';rows.forEach((r,i)=>{let total=0,has=false,bad=false;let cells='';state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);const invalid=!isValidReadingText(raw);const u=usageFor(ym,i,m);const target=targetFor(m);if(u!==null){has=true;total+=u;if(u<0)bad=true}const readCls=(u!==null&&u<0)||invalid?'bad':'';const dayCls=['day-cell'];if(u!==null&&u<0)dayCls.push('bad');if(u!==null&&target!==null&&u>target)dayCls.push('target-exceed');cells+=`<td class="${readCls}"><input inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" placeholder="0 or 0.000" data-day="${r.day}" data-shift="${r.shift}" data-meter="${escAttr(m)}" value="${escAttr(raw)}"></td><td class="${dayCls.join(' ')}" title="${target!==null?'Target: '+fmtM3(target):'No target set'}">${u!==null?fmtM3(u):'-'}</td>`});html+=`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td>${cells}<td class="total-cell ${bad?'bad':''}">${has?fmtM3(total):'-'}</td></tr>`});html+='</tbody>';table.innerHTML=html;table.querySelectorAll('input').forEach(inp=>{
     const saveInput=e=>{const d=e.target.dataset.day,s=e.target.dataset.shift,m=e.target.dataset.meter;let v=cleanReadingInput(e.target.value);if(!isValidReadingText(v)){e.target.closest('td').classList.add('bad');return}const month=getMonth();if(!month[recKey(d,s)])month[recKey(d,s)]={};month[recKey(d,s)][m]=v;save();renderAll()};
     inp.onchange=saveInput;
     inp.onblur=saveInput;
@@ -68,18 +71,18 @@ function renderLineChart(points){
   const range=max-min||1;
   const xy=points.map((p,i)=>{const x=pad+(points.length===1?0:i*(w-pad*2)/(points.length-1));const y=h-pad-((p.total-min)/range)*(h-pad*2);return {x,y,...p}});
   const path=xy.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-  const circles=xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>${esc(p.label)}: ${fmtM3(p.total)}</title></circle>`).join('');
-  return `<div class="chart-scroll"><svg class="line-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Daily usage trend"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"/><path d="${path}"/>${circles}<text x="${pad}" y="24">Max ${fmtM3(max)}</text><text x="${w-pad-90}" y="${h-10}">${points.length} day(s)</text></svg></div>`
+  const circles=xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>${esc(p.label)}: ${fmtM3Summary(p.total)}</title></circle>`).join('');
+  return `<div class="chart-scroll"><svg class="line-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Daily usage trend"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"/><path d="${path}"/>${circles}<text x="${pad}" y="24">Max ${fmtM3Summary(max)}</text><text x="${w-pad-90}" y="${h-10}">${points.length} day(s)</text></svg></div>`
 }
 function renderBars(rows){
   const max=Math.max(...rows.map(r=>r.total),1);
-  return `<div class="bar-list">${rows.map(r=>`<div class="bar-row"><div class="bar-label">${esc(r.meter)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,r.total/max*100)}%"></div></div><div class="bar-value">${fmtM3(r.total)}</div></div>`).join('')}</div>`
+  return `<div class="bar-list">${rows.map(r=>`<div class="bar-row"><div class="bar-label">${esc(r.meter)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,r.total/max*100)}%"></div></div><div class="bar-value">${fmtM3Summary(r.total)}</div></div>`).join('')}</div>`
 }
 function buildInsights(ym,data,points,ranked){
   const insights=[];const prev=monthGrand(previousMonth(ym));
   if(prev){const pct=(data.grand-prev)/prev*100;insights.push(`Water usage ${pct>=0?'increased':'decreased'} ${fmt(Math.abs(pct))}% compared with last month.`)}
   else insights.push('No previous month data available for comparison yet.');
-  if(points.length){const peak=points.reduce((a,b)=>b.total>a.total?b:a,points[0]);insights.push(`Highest usage occurred on ${peak.label} with ${fmtM3(peak.total)} total usage.`)}
+  if(points.length){const peak=points.reduce((a,b)=>b.total>a.total?b:a,points[0]);insights.push(`Highest usage occurred on ${peak.label} with ${fmtM3Summary(peak.total)} total usage.`)}
   if(ranked.length&&data.grand>0){insights.push(`${ranked[0].meter} contributed ${fmt(ranked[0].total/data.grand*100)}% of the monthly usage.`)}
   const issues=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const u=usageFor(ym,i,m);if(u!==null&&u<0)issues.push(1)}));
   insights.push(issues.length?`${issues.length} abnormal negative reading issue(s) found. Please check Validation.`:'No abnormal negative reading detected.');
@@ -96,52 +99,52 @@ function renderSummary(){
   const high=points.length?points.reduce((a,b)=>b.total>a.total?b:a,points[0]):null;
   const low=points.length?points.reduce((a,b)=>b.total<a.total?b:a,points[0]):null;
   const difference=incoming.grand-data.grand;
-  const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
-  const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
-  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${isIncomingMeter(r.meter)?fmtRM(waterCost(r.total)):'-'}</td><td>${fmtM3(r.average)}</td><td>${fmtM3(r.highest)}</td><td>${fmtM3(r.lowest)}</td></tr>`).join('');
-  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmtM3(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
+  const incomingRows=incoming.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3Summary(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No incoming meter found.</div>';
+  const subRows=data.rows.map(r=>`<div class="water-balance-row"><span>${esc(r.meter)}</span><strong>${fmtM3Summary(r.total)}</strong></div>`).join('')||'<div class="water-balance-empty">No sub meter found.</div>';
+  const tableRows=allData.rows.map(r=>`<tr><td>${esc(r.meter)}</td><td>${fmtM3Summary(r.total)}</td><td>${isIncomingMeter(r.meter)?fmtRM(waterCost(r.total)):'-'}</td><td>${fmtM3Summary(r.average)}</td><td>${fmtM3Summary(r.highest)}</td><td>${fmtM3Summary(r.lowest)}</td></tr>`).join('');
+  const rankRows=ranked.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.meter)}</td><td>${fmtM3Summary(r.total)}</td><td>${data.grand?fmt(r.total/data.grand*100)+'%':'-'}</td></tr>`).join('');
   const incomingCost=waterCost(incoming.grand), consumptionCost=waterCost(data.grand), differenceCost=waterCost(Math.max(difference,0));
   const cb=costBreakdown(incoming.grand);
   document.getElementById('summaryContent').innerHTML=`
     <div class="note card"><b>Build:</b> ${APP_VERSION} · Water tariff formula enabled</div>
-    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmtM3(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
+    <div class="hero-card"><div class="hero-label">THIS MONTH WATER USAGE</div><div class="hero-value">${fmtM3Summary(data.grand)}</div><div class="hero-sub">Sub meter consumption only. Incoming meters are separated below.</div></div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-title">Total Incoming</div><div class="kpi-value">${fmtM3(incoming.grand)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Total Consumption</div><div class="kpi-value">${fmtM3(data.grand)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Difference</div><div class="kpi-value">${fmtM3(difference)}</div></div>
-      <div class="kpi-card"><div class="kpi-title">Average Daily Consumption</div><div class="kpi-value">${fmtM3(avgDay)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Total Incoming</div><div class="kpi-value">${fmtM3Summary(incoming.grand)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Total Consumption</div><div class="kpi-value">${fmtM3Summary(data.grand)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Difference</div><div class="kpi-value">${fmtM3Summary(difference)}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Average Daily Consumption</div><div class="kpi-value">${fmtM3Summary(avgDay)}</div></div>
     </div>
     <div class="dash-section water-balance-section">
       <h3>Water Source Balance (m³)</h3>
       <div class="water-balance-block">
         <div class="water-balance-title">▼ Incoming Meter</div>
         ${incomingRows}
-        <div class="water-balance-total"><span>Total Incoming</span><strong>${fmtM3(incoming.grand)}</strong></div>
+        <div class="water-balance-total"><span>Total Incoming</span><strong>${fmtM3Summary(incoming.grand)}</strong></div>
       </div>
       <div class="water-balance-divider"></div>
       <div class="water-balance-block">
         <div class="water-balance-title">▼ Sub Meter</div>
         ${subRows}
-        <div class="water-balance-total"><span>Total Consumption</span><strong>${fmtM3(data.grand)}</strong></div>
+        <div class="water-balance-total"><span>Total Consumption</span><strong>${fmtM3Summary(data.grand)}</strong></div>
       </div>
-      <div class="water-balance-difference"><span>Difference</span><strong>${fmtM3(difference)}</strong></div>
+      <div class="water-balance-difference"><span>Difference</span><strong>${fmtM3Summary(difference)}</strong></div>
     </div>
     <div class="dash-section tariff-section"><h3>Water Tariff Formula</h3>
       <div class="formula-box">
-        <div><b>Formula:</b> If Total Incoming ≤ ${fmtM3(tariff().threshold)}, Cost = Total Incoming × RM ${Number(tariff().firstRate).toFixed(2)}</div>
-        <div>If Total Incoming > ${fmtM3(tariff().threshold)}, Cost = (${fmtM3(tariff().threshold)} × RM ${Number(tariff().firstRate).toFixed(2)}) + ((Total Incoming − ${fmtM3(tariff().threshold)}) × RM ${Number(tariff().secondRate).toFixed(2)})</div>
+        <div><b>Formula:</b> If Total Incoming ≤ ${fmtM3Summary(tariff().threshold)}, Cost = Total Incoming × RM ${Number(tariff().firstRate).toFixed(2)}</div>
+        <div>If Total Incoming > ${fmtM3Summary(tariff().threshold)}, Cost = (${fmtM3Summary(tariff().threshold)} × RM ${Number(tariff().firstRate).toFixed(2)}) + ((Total Incoming − ${fmtM3Summary(tariff().threshold)}) × RM ${Number(tariff().secondRate).toFixed(2)})</div>
       </div>
       <table class="summary-table"><tr><th>Item</th><th>Volume</th><th>Rate</th><th>Estimated Cost</th></tr>
-        <tr><td>First Block</td><td>${fmtM3(cb.first)}</td><td>RM ${Number(tariff().firstRate).toFixed(2)} / m³</td><td>${fmtRM(cb.firstCost)}</td></tr>
-        <tr><td>Balance Block</td><td>${fmtM3(cb.balance)}</td><td>RM ${Number(tariff().secondRate).toFixed(2)} / m³</td><td>${fmtRM(cb.balanceCost)}</td></tr>
-        <tr><th>Total Incoming Cost</th><th>${fmtM3(incoming.grand)}</th><th></th><th>${fmtRM(incomingCost)}</th></tr>
+        <tr><td>First Block</td><td>${fmtM3Summary(cb.first)}</td><td>RM ${Number(tariff().firstRate).toFixed(2)} / m³</td><td>${fmtRM(cb.firstCost)}</td></tr>
+        <tr><td>Balance Block</td><td>${fmtM3Summary(cb.balance)}</td><td>RM ${Number(tariff().secondRate).toFixed(2)} / m³</td><td>${fmtRM(cb.balanceCost)}</td></tr>
+        <tr><th>Total Incoming Cost</th><th>${fmtM3Summary(incoming.grand)}</th><th></th><th>${fmtRM(incomingCost)}</th></tr>
       </table>
     </div>
     <div class="dash-section"><h3>Daily Usage Trend (m³)</h3>${renderLineChart(points)}</div>
     <div class="dash-section"><h3>Meter Comparison (m³)</h3>${renderBars(allData.rows)}</div>
     <div class="dash-section"><h3>Water Consumption Ranking</h3><table class="summary-table"><tr><th>Rank</th><th>Meter Name</th><th>Total Usage (m³)</th><th>Share</th></tr>${rankRows}</table></div>
     <div class="dash-section"><h3>System Insight</h3>${buildInsights(ym,data,points,ranked)}</div>
-    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Estimated Cost (RM)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3(data.grand)}</th><th>-</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3(incoming.grand)}</th><th>${fmtRM(incomingCost)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3(difference)}</th><th>-</th><th colspan="3"></th></tr></table></div>`
+    <div class="dash-section"><h3>Monthly Summary Table</h3><table class="summary-table"><tr><th>Meter Name</th><th>Total Usage (m³)</th><th>Estimated Cost (RM)</th><th>Average / Record (m³)</th><th>Highest (m³)</th><th>Lowest (m³)</th></tr>${tableRows}<tr><th>TOTAL CONSUMPTION</th><th>${fmtM3Summary(data.grand)}</th><th>-</th><th colspan="3"></th></tr><tr><th>TOTAL INCOMING</th><th>${fmtM3Summary(incoming.grand)}</th><th>${fmtRM(incomingCost)}</th><th colspan="3"></th></tr><tr><th>DIFFERENCE</th><th>${fmtM3Summary(difference)}</th><th>-</th><th colspan="3"></th></tr></table></div>`
 }
 function renderValidation(){const ym=monthPicker.value;let out=[];monthRows(ym).forEach((r,i)=>state.meters.forEach(m=>{const raw=val(ym,r.day,r.shift,m);if(raw!==''&&!isValidReadingText(raw))out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Invalid reading format. Use numbers only, example 4183.888 or 334888.</td></tr>`);const u=usageFor(ym,i,m);if(u!==null&&u<0)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="delete">Reading lower than previous reading</td></tr>`);if(u!==null&&u>1000)out.push(`<tr><td>${dateLabel(ym,r.day)}</td><td>${r.shift}</td><td>${esc(m)}</td><td class="warn">Unusually high usage: ${fmtM3(u)}. Please verify decimal point / digit count.</td></tr>`)}));document.getElementById('validationContent').innerHTML=out.length?`<table class="summary-table"><tr><th>Date</th><th>Shift</th><th>Meter</th><th>Issue</th></tr>${out.join('')}</table>`:'No validation issue found.'}
 function renderSettings(){
@@ -150,12 +153,13 @@ function renderSettings(){
   const secondInput=document.getElementById('tariffSecondRate');
   if(firstInput&&!firstInput.matches(':focus'))firstInput.value=Number(tarr.firstRate).toFixed(2);
   if(secondInput&&!secondInput.matches(':focus'))secondInput.value=Number(tarr.secondRate).toFixed(2);
-  let html='<tr><th>No.</th><th>Meter Name</th><th>Action</th></tr>';
-  state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" value="${escAttr(m)}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);
+  let html='<tr><th>No.</th><th>Meter Name</th><th>Daily Target Water Use<br>(m³/day)</th><th>Action</th></tr>';
+  state.meters.forEach((m,i)=>html+=`<tr><td>${i+1}</td><td><input data-i="${i}" data-old="${escAttr(m)}" value="${escAttr(m)}"></td><td><input type="number" step="0.001" min="0" placeholder="No target" data-target="${escAttr(m)}" value="${state.targets&&state.targets[m]!==undefined?escAttr(state.targets[m]):''}"></td><td><button class="smallbtn" data-up="${i}">↑</button><button class="smallbtn" data-down="${i}">↓</button><button class="smallbtn delete" data-del="${i}">Delete</button></td></tr>`);
   const t=document.getElementById('meterSettings');
   t.innerHTML=html;
-  t.querySelectorAll('input').forEach(inp=>inp.onchange=e=>{state.meters[e.target.dataset.i]=e.target.value.trim()||state.meters[e.target.dataset.i];save();renderAll()});
-  t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){state.meters.splice(+b.dataset.del,1);save();renderAll()}});
+  t.querySelectorAll('input[data-i]').forEach(inp=>inp.onchange=e=>{const i=+e.target.dataset.i;const oldName=e.target.dataset.old;const newName=e.target.value.trim()||state.meters[i];if(newName!==oldName&&state.targets&&state.targets[oldName]!==undefined){state.targets[newName]=state.targets[oldName];delete state.targets[oldName]}state.meters[i]=newName;save();renderAll()});
+  t.querySelectorAll('input[data-target]').forEach(inp=>inp.onchange=e=>{const meter=e.target.dataset.target;const v=String(e.target.value||'').trim();if(!state.targets)state.targets={};if(v===''){delete state.targets[meter]}else{const n=Number(v);if(!Number.isFinite(n)||n<0){alert('Please enter a valid daily target.');renderSettings();return}state.targets[meter]=String(n)}save();renderAll()});
+  t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Delete this meter?')){const m=state.meters[+b.dataset.del];state.meters.splice(+b.dataset.del,1);if(state.targets)delete state.targets[m];save();renderAll()}});
   t.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{let i=+b.dataset.up;if(i>0){[state.meters[i-1],state.meters[i]]=[state.meters[i],state.meters[i-1]];save();renderAll()}});
   t.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{let i=+b.dataset.down;if(i<state.meters.length-1){[state.meters[i+1],state.meters[i]]=[state.meters[i],state.meters[i+1]];save();renderAll()}});
 }

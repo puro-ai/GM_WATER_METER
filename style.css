@@ -15,3 +15,12 @@
 .water-balance-difference{margin-top:16px;border:2px solid #006b5d;border-radius:10px;background:#fff;font-size:20px;padding:14px 16px}
 .water-balance-empty{padding:10px 12px;color:#5b6770;font-weight:800;background:#f8fffd;border:1px dashed #cce5dc;border-radius:8px}
 .tariff-settings{display:flex;gap:16px;flex-wrap:wrap}.tariff-settings label{font-weight:800;color:#064e3b}.tariff-settings input{margin-top:6px;min-width:190px}.formula-box{background:#f8fffd;border:1px solid #cce5dc;border-radius:8px;padding:12px;margin-bottom:12px;line-height:1.6}.summary-table td:nth-child(2),.summary-table td:nth-child(3),.summary-table td:nth-child(4),.summary-table td:nth-child(5),.summary-table td:nth-child(6){font-variant-numeric:tabular-nums}.tariff-section{border-left:5px solid #0b8375}
+
+/* V4.2 Daily Input Reading / Day columns */
+.sheet .meter-group-head{min-width:220px}
+.sheet .sub-head{height:36px;font-size:12px;background:#087568;color:#fff;top:58px;z-index:3;position:sticky}
+.sheet .day-head{background:#0b8375}
+.sheet td.day-cell{background:#f3f4f6!important;color:#374151;font-weight:900;font-variant-numeric:tabular-nums;min-width:100px}
+.sheet td.target-exceed{background:#fee2e2!important;color:#991b1b!important;border:2px solid #ef4444;font-weight:900}
+.sheet td.target-exceed::after{content:'  ⚠';font-size:13px}
+.settings-table input[type="number"]{width:160px;text-align:center}
